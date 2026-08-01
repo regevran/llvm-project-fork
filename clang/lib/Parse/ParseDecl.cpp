@@ -7036,7 +7036,7 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
 
   // If this doesn't look like a structured binding, maybe it's a misplaced
   // array declarator.
-  if (!(Tok.isOneOf(tok::identifier, tok::ellipsis) &&
+  if (!(Tok.isOneOf(tok::identifier, tok::ellipsis, tok::kw_using) &&
         NextToken().isOneOf(tok::comma, tok::r_square, tok::kw_alignas,
                             tok::identifier, tok::l_square, tok::ellipsis)) &&
       !(Tok.is(tok::r_square) &&
@@ -7087,14 +7087,34 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
       ConsumeToken();
     }
 
-    if (Tok.isNot(tok::identifier)) {
-      Diag(Tok, diag::err_expected) << tok::identifier;
-      break;
+    bool UsedDeclaration = Tok.is(tok::kw_using);
+    if (UsedDeclaration) {
+        ConsumeToken();
     }
 
-    IdentifierInfo *II = Tok.getIdentifierInfo();
     SourceLocation Loc = Tok.getLocation();
-    ConsumeToken();
+    IdentifierInfo *II = nullptr;
+    Expr *UsingTargetExpr = nullptr;
+
+    if (UsedDeclaration) {
+      // P3817: the target of a using-marked binding is a unary-expression
+      // denoting an existing lvalue (a variable, a member, a subscript, a
+      // function call result, ...), not a new name. Ordinary expression
+      // parsing/Sema already does name lookup, implicit member resolution,
+      // and diagnoses an unresolved name, so there's nothing more to do
+      // here than parse it.
+      ExprResult Target = ParseCastExpression(CastParseKind::UnaryExprOnly);
+      if (Target.isInvalid())
+        break;
+      UsingTargetExpr = Target.get();
+    } else {
+      if (Tok.isNot(tok::identifier)) {
+        Diag(Tok, diag::err_expected) << tok::identifier;
+        break;
+      }
+      II = Tok.getIdentifierInfo();
+      ConsumeToken();
+    }
 
     if (Tok.is(tok::ellipsis) && !PrevEllipsisLoc.isValid()) {
       DiagnoseMisplacedEllipsis(Tok.getLocation(), Loc, EllipsisLoc.isValid(),
@@ -7110,7 +7130,8 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
       MaybeParseCXX11Attributes(Attrs);
     }
 
-    Bindings.push_back({II, Loc, std::move(Attrs), EllipsisLoc});
+    Bindings.push_back({II, Loc, std::move(Attrs), EllipsisLoc, UsedDeclaration,
+                         UsingTargetExpr});
   }
 
   if (Tok.isNot(tok::r_square))

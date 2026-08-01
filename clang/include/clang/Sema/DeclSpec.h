@@ -1844,6 +1844,11 @@ public:
     SourceLocation NameLoc;
     std::optional<ParsedAttributes> Attrs;
     SourceLocation EllipsisLoc;
+    bool UsedDeclaration = false;
+    // P3817: for a using-marked binding, the parsed (and already
+    // Sema-resolved) target expression, e.g. `x`, `s[0]`, `foo()`,
+    // `obj.member`. Null unless UsedDeclaration is true.
+    Expr *UsingTargetExpr = nullptr;
   };
 
 private:
