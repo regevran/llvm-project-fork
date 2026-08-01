@@ -33,7 +33,8 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   copy), across all three decomposition kinds: array/vector/complex,
   tuple-like (via `std::get`, e.g. `std::pair`/`std::tuple`), and
   non-tuple-like class member decomposition.
-- Exercised by the ad hoc programs under `p3817_test/`.
+- Exercised by the ad hoc programs under `p3817_test/`, and (partially --
+  see below) by `clang/test/{SemaCXX,CodeGenCXX}/p3817-*.cpp` lit tests.
 
 ## Known gaps
 
@@ -58,15 +59,24 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
 
 ### Engineering / process gaps
 
-- **No clang test suite integration.** Everything lives in `p3817_test/` as
-  plain `.cpp` programs, not `clang/test/{Parser,SemaCXX,CodeGenCXX}` lit
-  tests with `-verify`/`-ast-dump`/`FileCheck` annotations. `ninja
-  check-clang` exercises none of this feature.
-- **AST serialization (PCH/modules) untouched.** `BindingDecl::ReusedDecl`,
-  `ReusedTargetExpr`, and `ReusedAssignment` are never read or written by
-  `ASTReader`/`ASTWriter`. A `using`-marked binding compiled through a PCH
-  or C++20 module boundary will currently lose them silently — the same
-  failure mode as the template gap above, via a different boundary.
+- **Clang test suite integration: partial.** `clang/test/SemaCXX/p3817-using.cpp`,
+  `clang/test/SemaCXX/p3817-using-returned-lvalues.cpp`, and
+  `clang/test/CodeGenCXX/p3817-using.cpp` now give `ninja check-clang`
+  real `-verify`/`FileCheck` coverage of name resolution, diagnostics, and
+  move-vs-copy codegen selection. Still missing: a Parser-level test for
+  the comma-disambiguation guarantee at the grammar level, and
+  gap-documentation tests pinning down the four ill-formed cases listed
+  above as "currently accepted" so a future fix has something to flip to
+  "expected-error". `p3817_test/` remains the place for things that need
+  real execution (values, not just diagnostics/IR shape) — see
+  `comma_disambiguation_test.cpp` for why: the SemaCXX test for the same
+  guarantee only proves absence of one failure signature (an arity
+  mismatch), not that the two-way split is semantically correct.
+- **AST serialization (PCH/modules) untouched.** `BindingDecl::ReusedTargetExpr`
+  and `ReusedAssignment` are never read or written by `ASTReader`/`ASTWriter`.
+  A `using`-marked binding compiled through a PCH or C++20 module boundary
+  will currently lose them silently — the same failure mode as the
+  template gap above, via a different boundary.
 - **No `-ast-dump`/`-ast-print` support.** `ASTDumper.cpp`,
   `DeclPrinter.cpp`, and `TextNodeDumper.cpp` have no awareness of
   `using`-marked bindings.
@@ -86,4 +96,7 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
 - `clang/lib/Sema/SemaDeclCXX.cpp` — name resolution and assignment
   building
 - `clang/lib/CodeGen/CGDecl.cpp` — codegen
-- `p3817_test/` — example/scratch programs
+- `clang/test/SemaCXX/p3817-*.cpp`, `clang/test/CodeGenCXX/p3817-using.cpp` —
+  lit tests (`ninja check-clang`)
+- `p3817_test/` — example/scratch programs, and execution-based checks that
+  lit's `-verify`/`FileCheck` machinery can't express
