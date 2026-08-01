@@ -2096,9 +2096,19 @@ void CodeGenFunction::EmitAutoVarInit(const AutoVarEmission &emission) {
 
 void CodeGenFunction::MaybeEmitDeferredVarDeclInit(const VarDecl *VD) {
   if (auto *DD = dyn_cast_if_present<DecompositionDecl>(VD)) {
-    for (auto *B : DD->flat_bindings())
+    for (auto *B : DD->flat_bindings()) {
+      // Tuple-like decomposition still allocates a holding var per element
+      // (using-marked or not); it must be emitted before any assignment
+      // below can read through it.
       if (auto *HD = B->getHoldingVar())
         EmitVarDecl(*HD);
+      // P3817: for a using-marked binding, Sema has already built the real
+      // `target = source` expression (going through operator=, matching the
+      // move/copy semantics of the ref-qualifier) — just emit it like any
+      // other assignment statement.
+      if (Expr *Assign = B->getReusedAssignment())
+        EmitIgnoredExpr(Assign);
+    }
   }
 }
 
