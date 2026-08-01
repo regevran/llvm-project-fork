@@ -4226,6 +4226,17 @@ class BindingDecl : public ValueDecl {
 
   void anchor() override;
 
+  // P3817: the `target = source` assignment expression built once the real
+  // binding expression is known, for a `using`-marked binding. Null unless
+  // getReusedTargetExpr() is also non-null.
+  Expr *ReusedAssignment = nullptr;
+  // P3817: the lvalue expression a using-marked binding assigns into --
+  // parsed directly as a unary-expression (a DeclRefExpr, MemberExpr,
+  // CallExpr, ArraySubscriptExpr, ...); ordinary expression parsing/Sema
+  // already resolves names, implicit member access, etc. Null for a
+  // non-using binding.
+  Expr *ReusedTargetExpr = nullptr;
+
 public:
   friend class ASTDeclReader;
 
@@ -4260,6 +4271,20 @@ public:
   /// Get the variable (if any) that holds the value of evaluating the binding.
   /// Only present for user-defined bindings for tuple-like types.
   VarDecl *getHoldingVar() const;
+
+  void setReusedTargetExpr(Expr *E) {
+      ReusedTargetExpr = E;
+  }
+  Expr *getReusedTargetExpr() const {
+      return ReusedTargetExpr;
+  }
+
+  void setReusedAssignment(Expr *E) {
+      ReusedAssignment = E;
+  }
+  Expr *getReusedAssignment() const {
+      return ReusedAssignment;
+  }
 
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == Decl::Binding; }
