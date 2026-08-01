@@ -1666,6 +1666,41 @@ static bool checkMemberDecomposition(Sema &S, ArrayRef<BindingDecl*> Bindings,
   return false;
 }
 
+// P3817: build the real `target = source` assignment for each using-marked
+// binding, once its binding expression is known, so CodeGen can emit it like
+// any other assignment (going through operator=, not a raw store).
+//
+// Per [dcl.struct.bind]p1, the hidden variable e is an xvalue unless its
+// declared type is an lvalue reference. None of checkArrayLikeDecomposition,
+// checkMemberDecomposition, or checkTupleLikeDecomposition preserve that
+// distinction in the Binding expr they hand back (subscript/member access on
+// e is always an lvalue; checkTupleLikeDecomposition's holding var is always
+// named as an lvalue too), so recover it here the same way
+// checkTupleLikeDecomposition does when it builds the get<>() argument.
+static void BuildP3817ReusedAssignments(Sema &S, DecompositionDecl *DD,
+                                        ArrayRef<BindingDecl *> Bindings) {
+  bool EIsLValue = DD->getType()->isLValueReferenceType();
+  for (BindingDecl *B : Bindings) {
+    Expr *TargetExpr = B->getReusedTargetExpr();
+    Expr *Source = B->getBinding();
+    if (!TargetExpr || !Source)
+      continue;
+
+    if (!EIsLValue && Source->isLValue())
+      Source = ImplicitCastExpr::Create(S.Context, Source->getType(),
+                                        CK_NoOp, Source, nullptr, VK_XValue,
+                                        FPOptionsOverride());
+
+    ExprResult Assign = S.BuildBinOp(/*S=*/nullptr, B->getLocation(),
+                                     BO_Assign, TargetExpr, Source);
+    if (Assign.isInvalid())
+      continue;
+    Assign = S.ActOnFinishFullExpr(Assign.get(), /*DiscardedValue=*/true);
+    if (!Assign.isInvalid())
+      B->setReusedAssignment(Assign.get());
+  }
+}
+
 void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   QualType DecompType = DD->getType();
 
@@ -1691,16 +1726,22 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   if (auto *CAT = Context.getAsConstantArrayType(DecompType)) {
     if (checkArrayDecomposition(*this, Bindings, DD, DecompType, CAT))
       DD->setInvalidDecl();
+    else
+      BuildP3817ReusedAssignments(*this, DD, Bindings);
     return;
   }
   if (auto *VT = DecompType->getAs<VectorType>()) {
     if (checkVectorDecomposition(*this, Bindings, DD, DecompType, VT))
       DD->setInvalidDecl();
+    else
+      BuildP3817ReusedAssignments(*this, DD, Bindings);
     return;
   }
   if (auto *CT = DecompType->getAs<ComplexType>()) {
     if (checkComplexDecomposition(*this, Bindings, DD, DecompType, CT))
       DD->setInvalidDecl();
+    else
+      BuildP3817ReusedAssignments(*this, DD, Bindings);
     return;
   }
 
@@ -1716,6 +1757,8 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   case IsTupleLike::TupleLike:
     if (checkTupleLikeDecomposition(*this, Bindings, DD, DecompType, TupleSize))
       DD->setInvalidDecl();
+    else
+      BuildP3817ReusedAssignments(*this, DD, Bindings);
     return;
 
   case IsTupleLike::NotTupleLike:
@@ -1737,6 +1780,8 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   //   E or of the same unambiguous public base class of E, ...
   if (checkMemberDecomposition(*this, Bindings, DD, DecompType, RD))
     DD->setInvalidDecl();
+  else
+    BuildP3817ReusedAssignments(*this, DD, Bindings);
 }
 
 UnsignedOrNone Sema::GetDecompositionElementCount(QualType T,
