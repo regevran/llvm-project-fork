@@ -898,6 +898,34 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
 
   // Build the BindingDecls.
   for (auto &B : D.getDecompositionDeclarator().bindings()) {
+
+    QualType QT;
+    if (B.EllipsisLoc.isValid()) {
+      if (!cast<Decl>(DC)->isTemplated())
+        Diag(B.EllipsisLoc, diag::err_pack_outside_template);
+      QT = Context.getPackExpansionType(Context.DependentTy, std::nullopt,
+                                        /*ExpectsPackInType=*/false);
+    }
+
+    if (B.UsedDeclaration) {
+      // P3817: a using-marked binding names an existing entity rather than
+      // declaring a new one. The parser has already parsed and fully
+      // resolved B.UsingTargetExpr via ordinary expression Sema (name
+      // lookup, implicit member access, "undeclared identifier"
+      // diagnostics, everything), so there's no name to conflict-check,
+      // shadow-check, or push onto the scope chain here -- just record the
+      // target expression. Whether it's actually a modifiable lvalue is
+      // checked later, when the real `target = source` assignment is built
+      // (see BuildP3817ReusedAssignments), the same way an ordinary
+      // assignment statement would be.
+      auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, /*Id=*/nullptr, QT);
+      if (B.UsingTargetExpr)
+        BD->setReusedTargetExpr(B.UsingTargetExpr);
+      Bindings.push_back(BD);
+      ParsingInitForAutoVars.insert(BD);
+      continue;
+    }
+
     // Check for name conflicts.
     DeclarationNameInfo NameInfo(B.Name, B.NameLoc);
     IdentifierInfo *VarName = B.Name;
@@ -913,14 +941,6 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
         Previous.getFoundDecl()->isTemplateParameter()) {
       DiagnoseTemplateParameterShadow(B.NameLoc, Previous.getFoundDecl());
       Previous.clear();
-    }
-
-    QualType QT;
-    if (B.EllipsisLoc.isValid()) {
-      if (!cast<Decl>(DC)->isTemplated())
-        Diag(B.EllipsisLoc, diag::err_pack_outside_template);
-      QT = Context.getPackExpansionType(Context.DependentTy, std::nullopt,
-                                        /*ExpectsPackInType=*/false);
     }
 
     auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, B.Name, QT);
