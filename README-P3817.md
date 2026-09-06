@@ -47,8 +47,8 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
 - **Packs** (`using ...expr`). Not implemented; deferred alongside
   templates.
 - Several paper-mandated ill-formed cases were silently accepted instead of
-  rejected; three are now fixed, the rest remain (verified — no diagnostic,
-  no crash, just wrong behavior):
+  rejected; four are now fixed, one is intentionally deferred (verified —
+  no diagnostic, no crash, just wrong behavior):
   - ~~Duplicate using-targets in one binding list~~ — **fixed.**
     `auto [using x, using x] = ...;` is now rejected, along with the same
     variable reached through a member-access or constant-index-subscript
@@ -68,10 +68,21 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
     placeholder happens to be in scope (Sema only diagnoses a *reference*
     to `_` when it's ambiguous between multiple placeholders, not when
     there's a lone one to resolve to unambiguously).
-  - `const` on the structured binding itself when it has `using`-elements,
-    independent of whether the target itself is const (only "target is
-    const" is currently checked, which is a different, narrower rule)
-  - Attributes after a `using`-marked element (the paper disallows these)
+  - **`const` on the structured binding itself with `using`-elements:
+    intentionally not implemented.** The paper mandates this as
+    ill-formed (only "target is const" is currently checked, which is a
+    different, narrower rule), but that's the paper authors' own judgment
+    call (see "Alternative Considered" under `#const` in `P3817.md`), not
+    a language constraint, and it's the kind of decision EWGI/EWG
+    discussion is likely to revisit. Deferred rather than implemented
+    against a rule expected to change.
+  - ~~Attributes after a `using`-marked element~~ — **fixed.** No
+    attribute-specifier-seq appears in the using-marked alternative of
+    sb-identifier — attributes appertain to a newly declared variable, and
+    a using-marked element introduces none. (Unlike `const`, there's no
+    known EWG sentiment either way on this one; implemented anyway since
+    the fix reuses `Parser::DiagnoseAndSkipCXX11Attributes()`, already
+    used elsewhere in the same function for the same purpose.)
 
 ### Engineering / process gaps
 
@@ -80,11 +91,9 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   `clang/test/CodeGenCXX/p3817-using.cpp` now give `ninja check-clang`
   real `-verify`/`FileCheck` coverage of name resolution, diagnostics, and
   move-vs-copy codegen selection. `clang/test/SemaCXX/p3817-using-illformed.cpp`
-  now also gives real `-verify` coverage for the three fixed ill-formed cases
+  now also gives real `-verify` coverage for the four fixed ill-formed cases
   above. Still missing: a Parser-level test for the comma-disambiguation
-  guarantee at the grammar level, and gap-documentation tests for the
-  remaining ill-formed-but-currently-accepted cases listed above so a
-  future fix has something to flip to "expected-error". `p3817_test/`
+  guarantee at the grammar level. `p3817_test/`
   remains the place for things that need
   real execution (values, not just diagnostics/IR shape) — see
   `comma_disambiguation_test.cpp` for why: the SemaCXX test for the same

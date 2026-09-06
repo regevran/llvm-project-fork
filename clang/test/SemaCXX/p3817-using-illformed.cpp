@@ -105,3 +105,30 @@ void ok_placeholder_element() {
   (void)x;
 }
 } // namespace UsingPlaceholder
+
+namespace UsingAttribute {
+// No attribute-specifier-seq appears in the using-marked alternative of
+// sb-identifier -- attributes appertain to a newly declared variable, and
+// a using-marked element introduces none.
+void attr_on_using_element() {
+  int x;
+  auto [using x [[maybe_unused]], y] = get();
+  // expected-error@-1 {{an attribute list cannot appear here}}
+  // expected-error@-2 {{type 'Pair' binds to 2 elements, but no names were provided}}
+  (void)y; // expected-error {{use of undeclared identifier 'y'}}
+}
+
+// An attribute on an ordinary (non-using) element is unaffected.
+void attr_on_plain_element_ok() {
+  auto [x [[maybe_unused]], y] = get();
+  (void)x;
+  (void)y;
+}
+
+// A using-marked element without an attribute is unaffected.
+void using_without_attr_ok() {
+  int x;
+  auto [using x, y] = get();
+  (void)y;
+}
+} // namespace UsingAttribute
