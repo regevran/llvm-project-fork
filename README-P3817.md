@@ -46,11 +46,14 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   no diagnostic.
 - **Packs** (`using ...expr`). Not implemented; deferred alongside
   templates.
-- Several paper-mandated **ill-formed cases are currently silently
-  accepted** instead of rejected (verified — no diagnostic, no crash, just
-  wrong behavior):
+- Several paper-mandated ill-formed cases were silently accepted instead of
+  rejected; one is now fixed, the rest remain (verified — no diagnostic,
+  no crash, just wrong behavior):
   - Duplicate using-targets in one binding list: `auto [using x, using x] = ...;`
-  - `static`/`thread_local` combined with `using`
+  - ~~`static`/`thread_local` combined with `using`~~ — **fixed.** Unlike
+    ordinary structured bindings (where C++20 permits these), the
+    combination is now always ill-formed when the binding list has a
+    using-marked element.
   - `using` on the `_` placeholder
   - `const` on the structured binding itself when it has `using`-elements,
     independent of whether the target itself is const (only "target is
@@ -63,11 +66,13 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   `clang/test/SemaCXX/p3817-using-returned-lvalues.cpp`, and
   `clang/test/CodeGenCXX/p3817-using.cpp` now give `ninja check-clang`
   real `-verify`/`FileCheck` coverage of name resolution, diagnostics, and
-  move-vs-copy codegen selection. Still missing: a Parser-level test for
-  the comma-disambiguation guarantee at the grammar level, and
-  gap-documentation tests pinning down the four ill-formed cases listed
-  above as "currently accepted" so a future fix has something to flip to
-  "expected-error". `p3817_test/` remains the place for things that need
+  move-vs-copy codegen selection. `clang/test/SemaCXX/p3817-using-illformed.cpp`
+  now also gives real `-verify` coverage for the fixed ill-formed case
+  above. Still missing: a Parser-level test for the comma-disambiguation
+  guarantee at the grammar level, and gap-documentation tests for the
+  remaining ill-formed-but-currently-accepted cases listed above so a
+  future fix has something to flip to "expected-error". `p3817_test/`
+  remains the place for things that need
   real execution (values, not just diagnostics/IR shape) — see
   `comma_disambiguation_test.cpp` for why: the SemaCXX test for the same
   guarantee only proves absence of one failure signature (an arity

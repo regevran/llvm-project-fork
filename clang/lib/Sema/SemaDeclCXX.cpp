@@ -816,17 +816,36 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
     DiagCompat(Loc, diag_compat::decomp_decl_spec) << Name;
   };
 
+  // P3817: a using-marked element assigns to an already-existing entity; it
+  // introduces no new entity of its own, so there's nothing for a storage
+  // class specifier to act on. Unlike ordinary structured bindings (where
+  // C++20 permits 'static'/'thread_local'), the combination is always
+  // ill-formed when the binding list has a using-marked element.
+  bool HasUsingElement = llvm::any_of(
+      Decomp.bindings(), [](const auto &B) { return B.UsedDeclaration; });
+  auto DiagUsingBadSpecifier = [&](StringRef Name, SourceLocation Loc) {
+    Diag(Loc, diag::err_decomp_decl_using_bad_spec) << Name;
+  };
+
   if (auto SCS = DS.getStorageClassSpec()) {
-    if (SCS == DeclSpec::SCS_static)
+    if (HasUsingElement && SCS == DeclSpec::SCS_static)
+      DiagUsingBadSpecifier(DeclSpec::getSpecifierName(SCS),
+                            DS.getStorageClassSpecLoc());
+    else if (SCS == DeclSpec::SCS_static)
       DiagCpp20Specifier(DeclSpec::getSpecifierName(SCS),
                          DS.getStorageClassSpecLoc());
     else
       DiagBadSpecifier(DeclSpec::getSpecifierName(SCS),
                        DS.getStorageClassSpecLoc());
   }
-  if (auto TSCS = DS.getThreadStorageClassSpec())
-    DiagCpp20Specifier(DeclSpec::getSpecifierName(TSCS),
-                       DS.getThreadStorageClassSpecLoc());
+  if (auto TSCS = DS.getThreadStorageClassSpec()) {
+    if (HasUsingElement)
+      DiagUsingBadSpecifier(DeclSpec::getSpecifierName(TSCS),
+                            DS.getThreadStorageClassSpecLoc());
+    else
+      DiagCpp20Specifier(DeclSpec::getSpecifierName(TSCS),
+                         DS.getThreadStorageClassSpecLoc());
+  }
 
   if (DS.isInlineSpecified())
     DiagBadSpecifier("inline", DS.getInlineSpecLoc());
