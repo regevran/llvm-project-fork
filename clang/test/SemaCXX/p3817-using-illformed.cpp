@@ -33,3 +33,43 @@ void ok() {
   (void)y;
 }
 } // namespace StorageClass
+
+namespace DuplicateTarget {
+// Using the same variable more than once in a using-marked binding list is
+// ill-formed, even for a type whose operator= would tolerate it.
+void simple() {
+  int x;
+  auto [using x, using x] = get();
+  // expected-error@-1 {{'using' target already appears earlier in this structured binding declaration}}
+  // expected-note@-2 {{previous 'using' target specified here}}
+}
+
+struct S { int m; };
+void member() {
+  S s;
+  auto [using s.m, using s.m] = get();
+  // expected-error@-1 {{'using' target already appears earlier in this structured binding declaration}}
+  // expected-note@-2 {{previous 'using' target specified here}}
+}
+
+void subscript() {
+  int arr[2];
+  auto [using arr[0], using arr[0]] = get();
+  // expected-error@-1 {{'using' target already appears earlier in this structured binding declaration}}
+  // expected-note@-2 {{previous 'using' target specified here}}
+}
+
+// A different constant index is a different lvalue -- not a duplicate.
+void distinct_subscript() {
+  int arr[2];
+  auto [using arr[0], using arr[1]] = get();
+}
+
+// Two calls need not return the same lvalue, so this is conservatively not
+// flagged -- unlike a plain variable, a function call isn't provably the
+// same entity each time it's written.
+int& ref();
+void distinct_calls_not_flagged() {
+  auto [using ref(), using ref()] = get();
+}
+} // namespace DuplicateTarget

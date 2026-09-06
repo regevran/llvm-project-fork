@@ -754,6 +754,58 @@ void Sema::DiagPlaceholderVariableDefinition(SourceLocation Loc) {
   DiagCompat(Loc, diag_compat::placeholder_var_definition);
 }
 
+// P3817: are two using-targets provably the same lvalue, making
+// `auto [using x, using x] = ...;` a duplicate assignment target?
+// using-targets are unconverted lvalues (a variable, a chain of non-static
+// member accesses, an array subscript, ...), so this can't reuse
+// Expr::isSameComparisonOperand directly -- that helper's dispatch expects
+// its arguments already wrapped in the lvalue-to-rvalue ImplicitCastExpr an
+// ordinary comparison's operands would have. The recognized shapes mirror
+// that helper's conservative, structural notion of "same operand": this
+// says nothing about e.g. two using-targets that are function calls
+// (`using foo()`), since two calls need not return the same lvalue.
+static bool P3817RefersToSameUsingTarget(const Expr *E1, const Expr *E2) {
+  E1 = E1->IgnoreParenImpCasts();
+  E2 = E2->IgnoreParenImpCasts();
+
+  if (E1->getStmtClass() != E2->getStmtClass())
+    return false;
+
+  switch (E1->getStmtClass()) {
+  case Stmt::CXXThisExprClass:
+    return true;
+  case Stmt::DeclRefExprClass:
+    return declaresSameEntity(cast<DeclRefExpr>(E1)->getDecl(),
+                              cast<DeclRefExpr>(E2)->getDecl());
+  case Stmt::MemberExprClass: {
+    const auto *ME1 = cast<MemberExpr>(E1);
+    const auto *ME2 = cast<MemberExpr>(E2);
+    if (!declaresSameEntity(ME1->getMemberDecl(), ME2->getMemberDecl()))
+      return false;
+    // A static data member isn't reached through its base object.
+    if (const auto *VD = dyn_cast<VarDecl>(ME1->getMemberDecl()))
+      if (VD->isStaticDataMember())
+        return true;
+    return P3817RefersToSameUsingTarget(ME1->getBase(), ME2->getBase());
+  }
+  case Stmt::ArraySubscriptExprClass: {
+    const auto *A1 = cast<ArraySubscriptExpr>(E1);
+    const auto *A2 = cast<ArraySubscriptExpr>(E2);
+    if (!P3817RefersToSameUsingTarget(A1->getBase(), A2->getBase()))
+      return false;
+    const auto *Idx1 =
+        dyn_cast<IntegerLiteral>(A1->getIdx()->IgnoreParenImpCasts());
+    const auto *Idx2 =
+        dyn_cast<IntegerLiteral>(A2->getIdx()->IgnoreParenImpCasts());
+    if (Idx1 && Idx2)
+      return llvm::APInt::isSameValue(Idx1->getValue(), Idx2->getValue());
+    return P3817RefersToSameUsingTarget(A1->getIdx(), A2->getIdx());
+  }
+  default:
+    return false;
+  }
+}
+
 NamedDecl *
 Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
                                    MultiTemplateParamsArg TemplateParamLists) {
@@ -915,6 +967,10 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
   // Build the BindingDecls.
   SmallVector<BindingDecl*, 8> Bindings;
 
+  // P3817: using-targets seen so far, to diagnose a target repeated later
+  // in the same binding list (`auto [using x, using x] = ...;`).
+  SmallVector<const Expr *, 4> SeenUsingTargets;
+
   // Build the BindingDecls.
   for (auto &B : D.getDecompositionDeclarator().bindings()) {
 
@@ -938,8 +994,22 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
       // (see BuildP3817ReusedAssignments), the same way an ordinary
       // assignment statement would be.
       auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, /*Id=*/nullptr, QT);
-      if (B.UsingTargetExpr)
+      if (B.UsingTargetExpr) {
         BD->setReusedTargetExpr(B.UsingTargetExpr);
+
+        for (const Expr *Prev : SeenUsingTargets) {
+          if (P3817RefersToSameUsingTarget(Prev, B.UsingTargetExpr)) {
+            Diag(B.UsingTargetExpr->getExprLoc(),
+                 diag::err_decomp_decl_using_duplicate_target)
+                << B.UsingTargetExpr->getSourceRange();
+            Diag(Prev->getExprLoc(),
+                 diag::note_decomp_decl_using_previous_target)
+                << Prev->getSourceRange();
+            break;
+          }
+        }
+        SeenUsingTargets.push_back(B.UsingTargetExpr);
+      }
       Bindings.push_back(BD);
       ParsingInitForAutoVars.insert(BD);
       continue;

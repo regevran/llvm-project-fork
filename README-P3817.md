@@ -47,9 +47,17 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
 - **Packs** (`using ...expr`). Not implemented; deferred alongside
   templates.
 - Several paper-mandated ill-formed cases were silently accepted instead of
-  rejected; one is now fixed, the rest remain (verified — no diagnostic,
+  rejected; two are now fixed, the rest remain (verified — no diagnostic,
   no crash, just wrong behavior):
-  - Duplicate using-targets in one binding list: `auto [using x, using x] = ...;`
+  - ~~Duplicate using-targets in one binding list~~ — **fixed.**
+    `auto [using x, using x] = ...;` is now rejected, along with the same
+    variable reached through a member-access or constant-index-subscript
+    chain (`using s.m` / `using arr[0]` repeated). Detection is
+    intentionally conservative/structural (same idea as the existing
+    self-comparison-warning helper `Expr::isSameComparisonOperand`, entered
+    directly since using-targets are unconverted lvalues): two using-targets
+    that are function calls (`using foo()`) are never flagged, since two
+    calls need not return the same lvalue.
   - ~~`static`/`thread_local` combined with `using`~~ — **fixed.** Unlike
     ordinary structured bindings (where C++20 permits these), the
     combination is now always ill-formed when the binding list has a
@@ -67,7 +75,7 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   `clang/test/CodeGenCXX/p3817-using.cpp` now give `ninja check-clang`
   real `-verify`/`FileCheck` coverage of name resolution, diagnostics, and
   move-vs-copy codegen selection. `clang/test/SemaCXX/p3817-using-illformed.cpp`
-  now also gives real `-verify` coverage for the fixed ill-formed case
+  now also gives real `-verify` coverage for the two fixed ill-formed cases
   above. Still missing: a Parser-level test for the comma-disambiguation
   guarantee at the grammar level, and gap-documentation tests for the
   remaining ill-formed-but-currently-accepted cases listed above so a
