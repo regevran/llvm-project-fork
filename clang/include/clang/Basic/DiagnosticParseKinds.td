@@ -996,6 +996,8 @@ def err_binding_multiple_ellipses : Error<
   "multiple packs in structured binding declaration">;
 def note_previous_ellipsis : Note<
   "previous binding pack specified here">;
+def err_decomp_decl_using_placeholder : Error<
+  "'using' target cannot be the placeholder '_'">;
 def err_capture_default_first : Error<
   "capture default must be first">;
 def ext_decl_attrs_on_lambda : ExtWarn<

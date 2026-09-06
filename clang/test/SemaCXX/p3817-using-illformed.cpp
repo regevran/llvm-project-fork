@@ -73,3 +73,35 @@ void distinct_calls_not_flagged() {
   auto [using ref(), using ref()] = get();
 }
 } // namespace DuplicateTarget
+
+namespace UsingPlaceholder {
+// '_' is the discard placeholder; it can't be a using-target, regardless
+// of whether some entity named '_' happens to be in scope -- the plain
+// declaration form never performs lookup for '_' either, it just always
+// declares a fresh placeholder.
+void no_placeholder_in_scope() {
+  auto [using _, y] = get();
+  // expected-error@-1 {{'using' target cannot be the placeholder '_'}}
+  // expected-error@-2 {{type 'Pair' binds to 2 elements, but no names were provided}}
+  (void)y; // expected-error {{use of undeclared identifier 'y'}}
+}
+
+// The dangerous case: a lone placeholder resolves unambiguously via
+// ordinary lookup (Sema only diagnoses '_' as a *reference* when it's
+// ambiguous between multiple placeholders), so this must be rejected
+// before it ever reaches ordinary expression Sema.
+void one_placeholder_in_scope() {
+  auto [_, y] = get();
+  auto [using _, z] = get();
+  // expected-error@-1 {{'using' target cannot be the placeholder '_'}}
+  // expected-error@-2 {{type 'Pair' binds to 2 elements, but no names were provided}}
+  (void)y;
+  (void)z; // expected-error {{use of undeclared identifier 'z'}}
+}
+
+// '_' as an ordinary (non-using) discard element is unaffected.
+void ok_placeholder_element() {
+  auto [x, _] = get();
+  (void)x;
+}
+} // namespace UsingPlaceholder

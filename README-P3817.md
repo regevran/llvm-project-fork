@@ -47,7 +47,7 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
 - **Packs** (`using ...expr`). Not implemented; deferred alongside
   templates.
 - Several paper-mandated ill-formed cases were silently accepted instead of
-  rejected; two are now fixed, the rest remain (verified — no diagnostic,
+  rejected; three are now fixed, the rest remain (verified — no diagnostic,
   no crash, just wrong behavior):
   - ~~Duplicate using-targets in one binding list~~ — **fixed.**
     `auto [using x, using x] = ...;` is now rejected, along with the same
@@ -62,7 +62,12 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
     ordinary structured bindings (where C++20 permits these), the
     combination is now always ill-formed when the binding list has a
     using-marked element.
-  - `using` on the `_` placeholder
+  - ~~`using` on the `_` placeholder~~ — **fixed.** Rejected at the parser
+    level, before it ever reaches ordinary expression Sema: leaving it to
+    expression lookup would silently accept `using _` whenever exactly one
+    placeholder happens to be in scope (Sema only diagnoses a *reference*
+    to `_` when it's ambiguous between multiple placeholders, not when
+    there's a lone one to resolve to unambiguously).
   - `const` on the structured binding itself when it has `using`-elements,
     independent of whether the target itself is const (only "target is
     const" is currently checked, which is a different, narrower rule)
@@ -75,7 +80,7 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   `clang/test/CodeGenCXX/p3817-using.cpp` now give `ninja check-clang`
   real `-verify`/`FileCheck` coverage of name resolution, diagnostics, and
   move-vs-copy codegen selection. `clang/test/SemaCXX/p3817-using-illformed.cpp`
-  now also gives real `-verify` coverage for the two fixed ill-formed cases
+  now also gives real `-verify` coverage for the three fixed ill-formed cases
   above. Still missing: a Parser-level test for the comma-disambiguation
   guarantee at the grammar level, and gap-documentation tests for the
   remaining ill-formed-but-currently-accepted cases listed above so a
