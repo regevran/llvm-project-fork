@@ -644,6 +644,9 @@ def err_decomp_decl_context : Error<
   "structured binding declaration not permitted in this context">;
 def err_decomp_decl_spec
     : Error<"structured binding declaration cannot be declared '%0'">;
+def err_decomp_decl_using_bad_spec : Error<
+  "structured binding declaration with a 'using'-marked element cannot be "
+  "declared '%0'">;
 def err_decomp_decl_type : Error<
   "structured binding declaration cannot be declared with type %0; "
   "declared type must be 'auto' or reference to 'auto'">;
