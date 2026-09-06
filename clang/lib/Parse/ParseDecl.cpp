@@ -7143,8 +7143,15 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
     ParsedAttributes Attrs(AttrFactory);
     if (isCXX11AttributeSpecifier() !=
         CXX11AttributeKind::NotAttributeSpecifier) {
-      DiagCompat(Tok, diag_compat::attrs_on_binding);
-      MaybeParseCXX11Attributes(Attrs);
+      if (UsedDeclaration) {
+        // P3817: no attribute-specifier-seq appears in the using-marked
+        // alternative of sb-identifier -- attributes appertain to a newly
+        // declared variable, and a using-marked element introduces none.
+        DiagnoseAndSkipCXX11Attributes();
+      } else {
+        DiagCompat(Tok, diag_compat::attrs_on_binding);
+        MaybeParseCXX11Attributes(Attrs);
+      }
     }
 
     Bindings.push_back({II, Loc, std::move(Attrs), EllipsisLoc, UsedDeclaration,
