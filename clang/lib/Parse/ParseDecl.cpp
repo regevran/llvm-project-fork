@@ -7097,6 +7097,23 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
     Expr *UsingTargetExpr = nullptr;
 
     if (UsedDeclaration) {
+      // P3817: '_' is the discard placeholder in both alternatives of
+      // sb-identifier -- the plain-declaration alternative never performs
+      // a lookup for it (it just declares a fresh placeholder unconditionally),
+      // so a using-target of exactly '_' must be rejected here too, before
+      // it ever reaches ordinary expression Sema. That's not optional: if
+      // exactly one '_' happens to be in scope, ordinary lookup resolves it
+      // unambiguously (Sema only diagnoses '_' as a *reference* when it's
+      // ambiguous between multiple placeholders), so leaving this to
+      // expression parsing would silently accept `using _` whenever there's
+      // a lone placeholder to bind to.
+      if (Tok.is(tok::identifier) && Tok.getIdentifierInfo()->isPlaceholder() &&
+          NextToken().isOneOf(tok::comma, tok::r_square)) {
+        Diag(Tok, diag::err_decomp_decl_using_placeholder);
+        ConsumeToken();
+        break;
+      }
+
       // P3817: the target of a using-marked binding is a unary-expression
       // denoting an existing lvalue (a variable, a member, a subscript, a
       // function call result, ...), not a new name. Ordinary expression
