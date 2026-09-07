@@ -33,6 +33,15 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   copy), across all three decomposition kinds: array/vector/complex,
   tuple-like (via `std::get`, e.g. `std::pair`/`std::tuple`), and
   non-tuple-like class member decomposition.
+- Constant evaluation (`constexpr`/`consteval`, `static_assert`) also runs
+  the real assignment, not just runtime CodeGen. (Found and fixed along the
+  way: CodeGen and `ExprConstant.cpp` each have their own "deferred
+  per-binding init" step used for tuple-like `std::get` materialization —
+  `CodeGenFunction::MaybeEmitDeferredVarDeclInit` and
+  `EvaluateDecompositionDeclInit` respectively — and only the CodeGen one
+  had been taught about `ReusedAssignment`. A using-marked binding evaluated
+  in a constant expression silently kept the target's old value instead of
+  failing to compile.)
 - Exercised by the ad hoc programs under `p3817_test/`, and (partially --
   see below) by `clang/test/{SemaCXX,CodeGenCXX}/p3817-*.cpp` lit tests.
 

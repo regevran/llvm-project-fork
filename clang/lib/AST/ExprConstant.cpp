@@ -5705,9 +5705,14 @@ static bool EvaluateDecl(EvalInfo &Info, const Decl *D,
 static bool EvaluateDecompositionDeclInit(EvalInfo &Info,
                                           const DecompositionDecl *DD) {
   bool OK = true;
-  for (auto *BD : DD->flat_bindings())
+  for (auto *BD : DD->flat_bindings()) {
     if (auto *VD = BD->getHoldingVar())
       OK &= EvaluateDecl(Info, VD, /*EvaluateConditionDecl=*/true);
+    // P3817: run the built `target = source` assignment as a side effect,
+    // matching CodeGen's MaybeEmitDeferredVarDeclInit.
+    if (Expr *Assign = BD->getReusedAssignment())
+      OK &= EvaluateIgnoredValue(Info, Assign);
+  }
 
   return OK;
 }
