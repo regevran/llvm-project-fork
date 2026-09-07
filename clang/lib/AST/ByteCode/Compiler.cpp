@@ -6575,10 +6575,16 @@ bool Compiler<Emitter>::visitCompoundStmt(const CompoundStmt *S) {
 template <class Emitter>
 bool Compiler<Emitter>::maybeEmitDeferredVarInit(const VarDecl *VD) {
   if (auto *DD = dyn_cast_if_present<DecompositionDecl>(VD)) {
-    for (auto *BD : DD->flat_bindings())
+    for (auto *BD : DD->flat_bindings()) {
       if (auto *KD = BD->getHoldingVar();
           KD && !this->visitVarDecl(KD, KD->getInit()))
         return false;
+      // P3817: run the built `target = source` assignment as a side
+      // effect, matching CodeGen's MaybeEmitDeferredVarDeclInit.
+      if (const Expr *Assign = BD->getReusedAssignment();
+          Assign && !this->discard(Assign))
+        return false;
+    }
   }
   return true;
 }
