@@ -52,6 +52,9 @@ namespace {
     void PrintObjCTypeParams(ObjCTypeParamList *Params);
     void PrintOpenACCRoutineOnLambda(Decl *D);
 
+    void printVarDeclSpecifiers(VarDecl *D);
+    void printVarInitializer(VarDecl *D);
+
   public:
     DeclPrinter(raw_ostream &Out, const PrintingPolicy &Policy,
                 const ASTContext &Context, unsigned Indentation = 0,
@@ -73,6 +76,7 @@ namespace {
     void VisitFriendTemplateDecl(FriendTemplateDecl *D);
     void VisitFieldDecl(FieldDecl *D);
     void VisitVarDecl(VarDecl *D);
+    void VisitDecompositionDecl(DecompositionDecl *D);
     void VisitLabelDecl(LabelDecl *D);
     void VisitParmVarDecl(ParmVarDecl *D);
     void VisitFileScopeAsmDecl(FileScopeAsmDecl *D);
@@ -459,6 +463,11 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
     // Don't print ObjCIvarDecls, as they are printed when visiting the
     // containing ObjCInterfaceDecl.
     if (isa<ObjCIvarDecl>(*D))
+      continue;
+
+    // Don't print BindingDecls, as they are printed when visiting the
+    // containing DecompositionDecl.
+    if (isa<BindingDecl>(*D))
       continue;
 
     // Skip over implicit declarations in pretty-printing mode.
@@ -963,7 +972,7 @@ void DeclPrinter::VisitLabelDecl(LabelDecl *D) {
   Out << *D << ":";
 }
 
-void DeclPrinter::VisitVarDecl(VarDecl *D) {
+void DeclPrinter::printVarDeclSpecifiers(VarDecl *D) {
   prettyPrintPragmas(D);
 
   if (std::optional<std::string> Attrs =
@@ -1006,15 +1015,25 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
     }
   }
 
+  // D->getName() is "" for a DecompositionDecl (it has no name of its own),
+  // which is exactly the declarator we want for one: just the type.
   printDeclType(T, (isa<ParmVarDecl>(D) && Policy.CleanUglifiedParameters &&
                     D->getIdentifier())
                        ? D->getIdentifier()->deuglifiedName()
                        : D->getName());
+}
+
+void DeclPrinter::VisitVarDecl(VarDecl *D) {
+  printVarDeclSpecifiers(D);
 
   if (std::optional<std::string> Attrs =
           prettyPrintAttributes(D, AttrPosAsWritten::Right))
     Out << ' ' << *Attrs;
 
+  printVarInitializer(D);
+}
+
+void DeclPrinter::printVarInitializer(VarDecl *D) {
   Expr *Init = D->getInit();
   if (!Policy.SuppressInitializers && Init) {
     bool ImplicitInit = false;
@@ -1042,6 +1061,25 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
         Out << ")";
     }
   }
+}
+
+void DeclPrinter::VisitDecompositionDecl(DecompositionDecl *D) {
+  printVarDeclSpecifiers(D);
+
+  Out << " [";
+  llvm::ListSeparator LS;
+  for (BindingDecl *B : D->bindings()) {
+    Out << LS;
+    if (B->isParameterPack())
+      Out << "...";
+    Out << B->getName();
+    if (std::optional<std::string> Attrs =
+            prettyPrintAttributes(B, AttrPosAsWritten::Right))
+      Out << ' ' << *Attrs;
+  }
+  Out << "]";
+
+  printVarInitializer(D);
 }
 
 void DeclPrinter::VisitParmVarDecl(ParmVarDecl *D) {
