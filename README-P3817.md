@@ -127,9 +127,20 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   in this tree covers *any* decomposition declaration across a module
   boundary, using-marked or not, and both boundaries share the exact same
   `ASTWriter`/`ASTReader` code this fix touches).
-- **No `-ast-dump`/`-ast-print` support.** `ASTDumper.cpp`,
-  `DeclPrinter.cpp`, and `TextNodeDumper.cpp` have no awareness of
-  `using`-marked bindings.
+- ~~No `-ast-dump` support.~~ — **fixed.** `TextNodeDumper::VisitBindingDecl`
+  now appends a ` using` marker to a using-marked binding's header line, and
+  `ASTNodeTraverser::VisitBindingDecl` dumps its target and the built
+  assignment as children — instead of `getBinding()`, which is already
+  reachable as the assignment's source operand, so dumping both would show
+  the same subexpression twice. This shared traversal is also what
+  `-ast-dump=json` walks, so JSON dumps pick up the same two children with
+  no separate change. Covered by `clang/test/AST/ast-dump-p3817-using.cpp`.
+- **`-ast-print` still open — being looked at separately.** `DeclPrinter`
+  has no decomposition-declaration support at all yet, `using`-marked or
+  not: `auto [x, y] = get();` currently prints as `auto = get();`, silently
+  dropping the whole `[x, y]` pattern. Fixing the `using`-marked case means
+  fixing that pre-existing gap too, so it's more than the "teach one more
+  visitor about two fields" shape the other three fixes here had.
 - **No experimental-extension gating or warning.** Compiles unconditionally
   in any `-std=` mode, with no flag to opt in/out and no diagnostic
   flagging usage as a non-standard, not-yet-adopted extension.
