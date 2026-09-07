@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++2c -triple x86_64-linux-gnu -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -triple x86_64-linux-gnu -emit-llvm -o - %s | FileCheck %s
 
 // P3817: a using-marked binding must be emitted as a real call through the
 // class's actual operator= (not a raw store), selecting move vs copy

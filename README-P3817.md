@@ -152,9 +152,28 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   packs (`auto [...rest] = arr;`) remain unprinted correctly (drops the
   leading `...`) — a separate, pre-existing gap noted in the upstream PR,
   out of scope here too.
-- **No experimental-extension gating or warning.** Compiles unconditionally
-  in any `-std=` mode, with no flag to opt in/out and no diagnostic
-  flagging usage as a non-standard, not-yet-adopted extension.
+- ~~No experimental-extension gating or warning.~~ — **fixed.** `using` in
+  a structured binding declaration now requires the new
+  `-fstructured-binding-assignment` flag (`LangOpts::StructuredBindingAssignment`,
+  a plain `BoolFOption` in `Options.td`, modeled directly on
+  `-freflection`'s gating of C++26 reflection — the closest real precedent
+  for "a paper not yet in any shipped standard"). Without it,
+  `Parser::ParseDecompositionDeclarator` rejects `using` there with a
+  friendly `err_decomp_decl_using_not_enabled` diagnostic naming the flag,
+  in every `-std=` mode, instead of silently accepting it. Gated at the
+  parser only — nothing downstream (Sema/CodeGen/Serialization) can be
+  reached with `using`-marked bindings if the parser never produces one.
+  Covered by `clang/test/SemaCXX/p3817-using-not-enabled.cpp`; every other
+  P3817 test's `RUN:` line now passes the flag. `-fstructured-binding-assignment`
+  is `CC1Option`-only (again matching `-freflection`), so it's usable via
+  `%clang_cc1` (every lit test here) but not yet exposed as a stable
+  top-level driver flag. Added purely as an exercise in gating an
+  experimental extension properly, since this branch was never intended to
+  land upstream as-is — a natural next step this makes possible, not done
+  here, is per-flavor sub-flags (e.g. an
+  `-fstructured-binding-assignment-allow-const` to toggle the deferred
+  `const` ill-formed-ness question from the "paper features" section
+  above).
 - **No documentation.** No `ReleaseNotes.rst` entry, no
   `docs/LanguageExtensions.rst` mention, no `clang/www/cxx_status.html`
   entry.

@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -ast-print -std=c++2c %s | FileCheck %s
+// RUN: %clang_cc1 -ast-print -std=c++2c -fstructured-binding-assignment %s | FileCheck %s
 
 // P3817 (Structured Binding Assignments): a using-marked binding has no
 // name of its own -- print its target instead, so `auto [using x, y]`

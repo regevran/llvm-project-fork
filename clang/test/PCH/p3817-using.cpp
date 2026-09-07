@@ -1,10 +1,10 @@
-// RUN: %clang_cc1 -std=c++2c -include %s -verify %s
-// RUN: %clang_cc1 -std=c++2c -include %s -verify %s -fexperimental-new-constant-interpreter
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -include %s -verify %s
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -include %s -verify %s -fexperimental-new-constant-interpreter
 //
-// RUN: %clang_cc1 -std=c++2c -emit-pch %s -o %t
-// RUN: %clang_cc1 -std=c++2c -include-pch %t -verify %s
-// RUN: %clang_cc1 -std=c++2c -emit-pch %s -o %t -fexperimental-new-constant-interpreter
-// RUN: %clang_cc1 -std=c++2c -include-pch %t -verify %s -fexperimental-new-constant-interpreter
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -emit-pch %s -o %t
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -include-pch %t -verify %s
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -emit-pch %s -o %t -fexperimental-new-constant-interpreter
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -include-pch %t -verify %s -fexperimental-new-constant-interpreter
 
 // expected-no-diagnostics
 

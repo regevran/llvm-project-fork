@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -std=c++2c -fsyntax-only -verify %s
-// RUN: %clang_cc1 -std=c++2c -fsyntax-only -verify %s -fexperimental-new-constant-interpreter
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -fsyntax-only -verify %s
+// RUN: %clang_cc1 -std=c++2c -fstructured-binding-assignment -fsyntax-only -verify %s -fexperimental-new-constant-interpreter
 
 // P3817 (Structured Binding Assignments): `using` before a
 // structured-binding element marks it as an assignment target -- an
