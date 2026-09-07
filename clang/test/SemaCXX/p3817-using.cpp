@@ -79,3 +79,20 @@ void two_bindings_not_one() {
   (void)b;
 }
 } // namespace CommaDisambiguation
+
+namespace ConstantEvaluation {
+using Basic::Pair;
+
+// The built `target = source` assignment must run as a side effect during
+// constant evaluation too, not just at runtime: CodeGen and the constant
+// evaluator each have their own deferred per-binding-init step, and only
+// teaching one of them about using-marked bindings would silently make `a`
+// below evaluate as if the assignment never happened, instead of failing to
+// compile.
+constexpr int reassigns_target(Pair p) {
+  int a = 0;
+  auto [using a, b] = p;
+  return a * 10 + b;
+}
+static_assert(reassigns_target({1, 2}) == 12);
+} // namespace ConstantEvaluation
