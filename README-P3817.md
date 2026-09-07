@@ -135,12 +135,23 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   the same subexpression twice. This shared traversal is also what
   `-ast-dump=json` walks, so JSON dumps pick up the same two children with
   no separate change. Covered by `clang/test/AST/ast-dump-p3817-using.cpp`.
-- **`-ast-print` still open — being looked at separately.** `DeclPrinter`
-  has no decomposition-declaration support at all yet, `using`-marked or
-  not: `auto [x, y] = get();` currently prints as `auto = get();`, silently
-  dropping the whole `[x, y]` pattern. Fixing the `using`-marked case means
-  fixing that pre-existing gap too, so it's more than the "teach one more
-  visitor about two fields" shape the other three fixes here had.
+- ~~No `-ast-print` support.~~ — **fixed.** `DeclPrinter` had no
+  decomposition-declaration support at all, `using`-marked or not:
+  `auto [x, y] = get();` printed as `auto = get();`, silently dropping the
+  whole `[x, y]` pattern (worse at namespace scope: two bogus empty
+  statements too, since each `BindingDecl` is a separate `DeclContext`
+  sibling there, unlike the local case). The general fix
+  (`DeclPrinter::VisitDecompositionDecl`, covering aggregate/array/
+  tuple-like decomposition) is a pre-existing Clang gap unrelated to P3817,
+  submitted upstream separately:
+  [llvm/llvm-project#221711](https://github.com/llvm/llvm-project/pull/221711),
+  covered by `clang/test/AST/ast-print-decomposition.cpp`. The
+  `using`-marked case builds on that: a using-marked binding has no name to
+  print, so it prints its target instead (`using x`, `using s.m`, ...).
+  Covered by `clang/test/AST/ast-print-p3817-using.cpp`. Structured binding
+  packs (`auto [...rest] = arr;`) remain unprinted correctly (drops the
+  leading `...`) — a separate, pre-existing gap noted in the upstream PR,
+  out of scope here too.
 - **No experimental-extension gating or warning.** Compiles unconditionally
   in any `-std=` mode, with no flag to opt in/out and no diagnostic
   flagging usage as a non-standard, not-yet-adopted extension.

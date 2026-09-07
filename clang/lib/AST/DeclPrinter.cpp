@@ -1070,12 +1070,21 @@ void DeclPrinter::VisitDecompositionDecl(DecompositionDecl *D) {
   llvm::ListSeparator LS;
   for (BindingDecl *B : D->bindings()) {
     Out << LS;
-    if (B->isParameterPack())
-      Out << "...";
-    Out << B->getName();
-    if (std::optional<std::string> Attrs =
-            prettyPrintAttributes(B, AttrPosAsWritten::Right))
-      Out << ' ' << *Attrs;
+    // P3817: a using-marked binding has no name of its own -- print its
+    // target instead. (It can't have an attribute-specifier-seq either --
+    // that's rejected at parse time -- so attribute printing below only
+    // applies to the ordinary case.)
+    if (Expr *Target = B->getReusedTargetExpr()) {
+      Out << "using ";
+      Target->printPretty(Out, nullptr, Policy, Indentation, "\n", &Context);
+    } else {
+      if (B->isParameterPack())
+        Out << "...";
+      Out << B->getName();
+      if (std::optional<std::string> Attrs =
+              prettyPrintAttributes(B, AttrPosAsWritten::Right))
+        Out << ' ' << *Attrs;
+    }
   }
   Out << "]";
 
