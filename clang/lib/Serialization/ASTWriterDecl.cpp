@@ -1425,6 +1425,10 @@ void ASTDeclWriter::VisitDecompositionDecl(DecompositionDecl *D) {
 void ASTDeclWriter::VisitBindingDecl(BindingDecl *D) {
   VisitValueDecl(D);
   Record.AddStmt(D->getBinding());
+  // P3817: the using-target and the built `target = source` assignment, for
+  // a using-marked binding; null for an ordinary one.
+  Record.AddStmt(D->getReusedTargetExpr());
+  Record.AddStmt(D->getReusedAssignment());
   Code = serialization::DECL_BINDING;
 }
 

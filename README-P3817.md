@@ -113,11 +113,20 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   `comma_disambiguation_test.cpp` for why: the SemaCXX test for the same
   guarantee only proves absence of one failure signature (an arity
   mismatch), not that the two-way split is semantically correct.
-- **AST serialization (PCH/modules) untouched.** `BindingDecl::ReusedTargetExpr`
-  and `ReusedAssignment` are never read or written by `ASTReader`/`ASTWriter`.
-  A `using`-marked binding compiled through a PCH or C++20 module boundary
-  will currently lose them silently — the same failure mode as the
-  template gap above, via a different boundary.
+- ~~AST serialization (PCH/modules) untouched.~~ — **fixed.**
+  `BindingDecl::ReusedTargetExpr` and `ReusedAssignment` are now written and
+  read back by `ASTDeclWriter`/`ASTDeclReader::VisitBindingDecl`, the same
+  way the pre-existing `Binding` field always was. Verified end-to-end by
+  hand (not just re-reading the two fields) both ways the paper's gap
+  description names: a PCH boundary and a C++20 named-module boundary, in
+  each case by having the assignment actually run *after* the round trip
+  and observing the target's new value — since it's easy to write a
+  serialization fix that reads back non-null-but-wrong exprs and still pass
+  a naive test. `clang/test/PCH/p3817-using.cpp` gives this regression
+  coverage (the module boundary isn't separately covered — no existing test
+  in this tree covers *any* decomposition declaration across a module
+  boundary, using-marked or not, and both boundaries share the exact same
+  `ASTWriter`/`ASTReader` code this fix touches).
 - **No `-ast-dump`/`-ast-print` support.** `ASTDumper.cpp`,
   `DeclPrinter.cpp`, and `TextNodeDumper.cpp` have no awareness of
   `using`-marked bindings.

@@ -1768,6 +1768,9 @@ void ASTDeclReader::VisitDecompositionDecl(DecompositionDecl *DD) {
 void ASTDeclReader::VisitBindingDecl(BindingDecl *BD) {
   VisitValueDecl(BD);
   BD->Binding = Record.readExpr();
+  // P3817: read back in the same order VisitBindingDecl wrote them.
+  BD->ReusedTargetExpr = Record.readExpr();
+  BD->ReusedAssignment = Record.readExpr();
 }
 
 void ASTDeclReader::VisitFileScopeAsmDecl(FileScopeAsmDecl *AD) {
