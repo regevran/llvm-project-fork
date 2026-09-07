@@ -4122,6 +4122,12 @@ defm reflection : BoolFOption<"reflection",
   PosFlag<SetTrue, [], [CC1Option],
           "Enable C++26 reflection">,
   NegFlag<SetFalse>>, ShouldParseIf<cplusplus.KeyPath>;
+defm structured_binding_assignment : BoolFOption<"structured-binding-assignment",
+  LangOpts<"StructuredBindingAssignment">, DefaultFalse,
+  PosFlag<SetTrue, [], [CC1Option],
+          "Enable P3817 structured binding assignment ('using'-marked "
+          "bindings)">,
+  NegFlag<SetFalse>>, ShouldParseIf<cplusplus.KeyPath>;
 defm sized_deallocation : BoolFOption<"sized-deallocation",
   LangOpts<"SizedDeallocation">, Default<cpp14.KeyPath>,
   PosFlag<SetTrue, [], [], "Enable C++14 sized global deallocation functions">,

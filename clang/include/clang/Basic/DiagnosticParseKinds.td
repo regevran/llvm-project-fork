@@ -998,6 +998,10 @@ def note_previous_ellipsis : Note<
   "previous binding pack specified here">;
 def err_decomp_decl_using_placeholder : Error<
   "'using' target cannot be the placeholder '_'">;
+def err_decomp_decl_using_not_enabled : Error<
+  "'using' in a structured binding declaration is not enabled; "
+  "use '-fstructured-binding-assignment' to enable this experimental "
+  "extension">;
 def err_capture_default_first : Error<
   "capture default must be first">;
 def ext_decl_attrs_on_lambda : ExtWarn<

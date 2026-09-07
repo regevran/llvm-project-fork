@@ -7088,6 +7088,14 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
     }
 
     bool UsedDeclaration = Tok.is(tok::kw_using);
+    if (UsedDeclaration && !getLangOpts().StructuredBindingAssignment) {
+      // P3817 is an experimental, non-standard extension: require an
+      // explicit opt-in rather than silently accepting 'using' here in
+      // every -std= mode.
+      Diag(Tok, diag::err_decomp_decl_using_not_enabled);
+      ConsumeToken();
+      break;
+    }
     if (UsedDeclaration) {
         ConsumeToken();
     }

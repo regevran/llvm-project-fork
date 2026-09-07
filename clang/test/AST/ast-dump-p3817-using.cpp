@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -ast-dump -std=c++2c %s | FileCheck %s
+// RUN: %clang_cc1 -ast-dump -std=c++2c -fstructured-binding-assignment %s | FileCheck %s
 
 // P3817 (Structured Binding Assignments): a using-marked binding declares
 // nothing (it has no name), so its dump must show something else to make it

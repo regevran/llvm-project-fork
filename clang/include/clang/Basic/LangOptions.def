@@ -538,6 +538,7 @@ LANGOPT(PreserveVec3Type, 1, 0, NotCompatible, "Preserve 3-component vector type
 LANGOPT(Reflection      , 1, 0, NotCompatible, "C++26 Reflection")
 
 LANGOPT(StablePointerSubtraction, 1, 0, NotCompatible, "Make unaligned pointer subtraction stable")
+LANGOPT(StructuredBindingAssignment, 1, 0, NotCompatible, "P3817 structured binding assignment ('using'-marked bindings)")
 
 #undef LANGOPT
 #undef ENUM_LANGOPT
