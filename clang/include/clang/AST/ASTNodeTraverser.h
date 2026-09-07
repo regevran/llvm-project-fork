@@ -601,7 +601,15 @@ public:
     if (const auto *V = D->getHoldingVar())
       Visit(V);
 
-    if (const auto *E = D->getBinding())
+    // P3817: for a using-marked binding, the built `target = source`
+    // assignment already contains getBinding() as its source operand --
+    // dump the target and the assignment instead of getBinding() again, to
+    // avoid showing the same subexpression as two separate children.
+    if (const auto *Target = D->getReusedTargetExpr()) {
+      Visit(Target);
+      if (const auto *Assign = D->getReusedAssignment())
+        Visit(Assign);
+    } else if (const auto *E = D->getBinding())
       Visit(E);
   }
 

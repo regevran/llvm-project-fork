@@ -2653,6 +2653,8 @@ void TextNodeDumper::VisitVarDecl(const VarDecl *D) {
 void TextNodeDumper::VisitBindingDecl(const BindingDecl *D) {
   dumpName(D);
   dumpType(D->getType());
+  if (D->getReusedTargetExpr())
+    OS << " using";
 }
 
 void TextNodeDumper::VisitCapturedDecl(const CapturedDecl *D) {
