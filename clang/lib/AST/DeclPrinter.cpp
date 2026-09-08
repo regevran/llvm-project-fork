@@ -1067,11 +1067,9 @@ void DeclPrinter::VisitDecompositionDecl(DecompositionDecl *D) {
   printVarDeclSpecifiers(D);
 
   Out << " [";
-  bool First = true;
+  llvm::ListSeparator LS;
   for (BindingDecl *B : D->bindings()) {
-    if (!First)
-      Out << ", ";
-    First = false;
+    Out << LS;
     // FIXME: this drops the leading "..." for a pack binding.
     Out << B->getName();
   }
