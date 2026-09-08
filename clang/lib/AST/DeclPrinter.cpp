@@ -52,7 +52,7 @@ namespace {
     void PrintObjCTypeParams(ObjCTypeParamList *Params);
     void PrintOpenACCRoutineOnLambda(Decl *D);
 
-    QualType printVarDeclSpecifiers(VarDecl *D);
+    void printVarDeclSpecifiers(VarDecl *D);
     void printVarInitializer(VarDecl *D);
 
   public:
@@ -972,7 +972,7 @@ void DeclPrinter::VisitLabelDecl(LabelDecl *D) {
   Out << *D << ":";
 }
 
-QualType DeclPrinter::printVarDeclSpecifiers(VarDecl *D) {
+void DeclPrinter::printVarDeclSpecifiers(VarDecl *D) {
   prettyPrintPragmas(D);
 
   if (std::optional<std::string> Attrs =
@@ -1015,16 +1015,16 @@ QualType DeclPrinter::printVarDeclSpecifiers(VarDecl *D) {
     }
   }
 
-  return T;
-}
-
-void DeclPrinter::VisitVarDecl(VarDecl *D) {
-  QualType T = printVarDeclSpecifiers(D);
-
+  // D->getName() is "" for a DecompositionDecl (it has no name of its own),
+  // which is exactly the declarator we want for one: just the type.
   printDeclType(T, (isa<ParmVarDecl>(D) && Policy.CleanUglifiedParameters &&
                     D->getIdentifier())
                        ? D->getIdentifier()->deuglifiedName()
                        : D->getName());
+}
+
+void DeclPrinter::VisitVarDecl(VarDecl *D) {
+  printVarDeclSpecifiers(D);
 
   if (std::optional<std::string> Attrs =
           prettyPrintAttributes(D, AttrPosAsWritten::Right))
@@ -1064,10 +1064,7 @@ void DeclPrinter::printVarInitializer(VarDecl *D) {
 }
 
 void DeclPrinter::VisitDecompositionDecl(DecompositionDecl *D) {
-  QualType T = printVarDeclSpecifiers(D);
-
-  // DecompositionDecl has no name of its own.
-  printDeclType(T, "");
+  printVarDeclSpecifiers(D);
 
   Out << " [";
   bool First = true;
