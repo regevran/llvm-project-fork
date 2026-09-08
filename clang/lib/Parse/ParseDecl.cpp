@@ -7036,7 +7036,8 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
 
   // If this doesn't look like a structured binding, maybe it's a misplaced
   // array declarator.
-  if (!(Tok.isOneOf(tok::identifier, tok::ellipsis, tok::kw_using) &&
+  if (!Tok.is(tok::kw_using) &&
+      !(Tok.isOneOf(tok::identifier, tok::ellipsis) &&
         NextToken().isOneOf(tok::comma, tok::r_square, tok::kw_alignas,
                             tok::identifier, tok::l_square, tok::ellipsis)) &&
       !(Tok.is(tok::r_square) &&
