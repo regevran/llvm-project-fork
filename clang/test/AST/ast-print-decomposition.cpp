@@ -83,7 +83,7 @@ using Aggregate::get;
 
 // CHECK-LABEL: void local() {
 void local() {
-  // CHECK-NEXT: auto [x {{\[\[}}maybe_unused{{\]\]}}, y] = get();
+  // CHECK-NEXT: auto [x {{\[\[}}maybe_unused]], y] = get();
   auto [x [[maybe_unused]], y] = get();
 }
 } // namespace Attributes
