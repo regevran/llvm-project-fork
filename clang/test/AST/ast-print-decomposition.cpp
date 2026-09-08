@@ -60,7 +60,8 @@ namespace NamespaceScope {
 using Aggregate::Pair;
 using Aggregate::get;
 
+// CHECK-NOT: {{^[[:space:]]*;[[:space:]]*$}}
 // CHECK: auto [gx, gy] = get();
 auto [gx, gy] = get();
-// CHECK-NOT: {{^;$}}
+// CHECK-NOT: {{^[[:space:]]*;[[:space:]]*$}}
 } // namespace NamespaceScope
