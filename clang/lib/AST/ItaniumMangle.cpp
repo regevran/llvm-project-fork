@@ -1506,8 +1506,18 @@ void CXXNameMangler::mangleUnqualifiedName(
       //
       // Proposed on cxx-abi-dev on 2016-08-12
       Out << "DC";
-      for (auto *BD : DD->bindings())
-        mangleSourceName(BD->getDeclName().getAsIdentifierInfo());
+      for (auto *BD : DD->bindings()) {
+        // P3817: a using-marked binding has no name of its own to mangle --
+        // mangle its target expression instead, so two decompositions that
+        // differ only in their using-targets don't collide. <source-name>
+        // always starts with a decimal digit (its length), and every
+        // <expression> production starts with a non-digit, so the two
+        // stay unambiguous within this sequence without an extra tag.
+        if (Expr *Target = BD->getReusedTargetExpr())
+          mangleExpression(Target);
+        else
+          mangleSourceName(BD->getDeclName().getAsIdentifierInfo());
+      }
       Out << 'E';
       writeAbiTags(ND, AdditionalAbiTags);
       break;

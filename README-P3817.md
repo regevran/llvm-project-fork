@@ -47,6 +47,21 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   using-marked binding evaluated in a constant expression silently kept the
   target's old value instead of running the assignment or failing to
   compile.)
+- A namespace-scope (global) using-marked decomposition no longer crashes
+  the compiler. Clang mangles the hidden decomposed object's linkage name
+  as `DC<source-name>*E`, built from each binding's name
+  (`ItaniumMangle.cpp`) — but a using-marked binding has no name of its
+  own (`Id` is null), so `mangleSourceName` dereferenced a null
+  `IdentifierInfo*` and segfaulted for anything beyond a purely local
+  binding (the only kind exercised before this was found). Fixed by
+  mangling the using-target's own expression instead of a source-name for
+  that binding, reusing Clang's existing general-purpose expression
+  mangler (`CXXNameMangler::mangleExpression`) — already covers every
+  kind of using-target the grammar allows (a plain reference, a member
+  access, a subscript, a call). Also fixes the ODR concern a naive "skip
+  it" fix would have had: two decompositions that are entirely
+  using-marked, e.g. two `auto [using a, using b] = ...;` with different
+  targets, would otherwise both mangle to the identical bare `DCE`.
 - Exercised by the ad hoc programs under `p3817_test/`, and (partially --
   see below) by `clang/test/{SemaCXX,CodeGenCXX}/p3817-*.cpp` lit tests.
 
