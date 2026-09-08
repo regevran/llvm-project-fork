@@ -76,3 +76,14 @@ template <unsigned N> void local() {
 }
 void (*p)() = local<0>;
 } // namespace Packs
+
+namespace Attributes {
+using Aggregate::Pair;
+using Aggregate::get;
+
+// CHECK-LABEL: void local() {
+void local() {
+  // CHECK-NEXT: auto [x {{\[\[}}maybe_unused{{\]\]}}, y] = get();
+  auto [x [[maybe_unused]], y] = get();
+}
+} // namespace Attributes

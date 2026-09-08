@@ -1073,6 +1073,9 @@ void DeclPrinter::VisitDecompositionDecl(DecompositionDecl *D) {
     if (B->isParameterPack())
       Out << "...";
     Out << B->getName();
+    if (std::optional<std::string> Attrs =
+            prettyPrintAttributes(B, AttrPosAsWritten::Right))
+      Out << ' ' << *Attrs;
   }
   Out << "]";
 
