@@ -31,7 +31,7 @@ namespace Array {
 void local() {
   // CHECK-NEXT: int arr[3] = {1, 2, 3};
   int arr[3] = {1, 2, 3};
-  // CHECK-NEXT: auto [a, b, c] = {{\{}}arr[*]{{(\})}};
+  // CHECK-NEXT: auto [a, b, c] = {arr[*]};
   auto [a, b, c] = arr;
 }
 } // namespace Array
