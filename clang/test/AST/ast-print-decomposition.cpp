@@ -71,7 +71,7 @@ namespace Packs {
 template <unsigned N> void local() {
   // CHECK-NEXT: int arr[4] = {1, 2, 3, 4};
   int arr[4] = {1, 2, 3, 4};
-  // CHECK-NEXT: auto [first, ...rest, last]
+  // CHECK-NEXT: auto [first, ...rest, last] = {{\{}}arr[*]{{(\})}};
   auto [first, ...rest, last] = arr;
 }
 void (*p)() = local<0>;
