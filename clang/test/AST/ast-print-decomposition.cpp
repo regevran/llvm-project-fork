@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++20 -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -std=c++26 -ast-print %s | FileCheck %s
 
 // The `[a, b]` binding list must survive -ast-print, not just the type.
 
@@ -65,3 +65,14 @@ using Aggregate::get;
 auto [gx, gy] = get();
 // CHECK-NOT: {{^[[:space:]]*;[[:space:]]*$}}
 } // namespace NamespaceScope
+
+namespace Packs {
+// CHECK-LABEL: void local() {
+template <unsigned N> void local() {
+  // CHECK-NEXT: int arr[4] = {1, 2, 3, 4};
+  int arr[4] = {1, 2, 3, 4};
+  // CHECK-NEXT: auto [first, ...rest, last]
+  auto [first, ...rest, last] = arr;
+}
+void (*p)() = local<0>;
+} // namespace Packs
