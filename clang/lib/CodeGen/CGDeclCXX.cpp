@@ -247,12 +247,19 @@ void CodeGenFunction::EmitCXXGlobalVarDeclInit(const VarDecl &D,
             // EmitGlobalVarDefinition -- that would decide HD needs its own
             // ctor and emit one as a separate top-level function, exactly
             // the ordering problem this whole block exists to avoid.
-            auto *HDGV =
-                cast<llvm::GlobalVariable>(CGM.GetAddrOfGlobalVar(HD));
+            auto *HDGV = cast<llvm::GlobalVariable>(
+                CGM.GetAddrOfGlobalVar(HD, /*Ty=*/nullptr, ForDefinition));
             HDGV->setInitializer(llvm::Constant::getNullValue(
                 HDGV->getValueType()));
             HDGV->setLinkage(llvm::GlobalValue::InternalLinkage);
             EmitCXXGlobalVarDeclInit(*HD, HDGV, true);
+            // A namespace reopened after HD was hidden-added to it (a very
+            // common pattern -- get() must be found by ADL, so callers
+            // often reopen the same namespace for it) makes
+            // CodeGenModule::EmitDeclContext walk HD again as an ordinary
+            // VarDecl. Mark it done so that doesn't emit a second,
+            // redundant top-level ctor for it.
+            CGM.markCXXGlobalVarDeclInitAlreadyEmitted(HD);
           }
           EmitIgnoredExpr(Assign);
         }

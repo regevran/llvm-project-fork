@@ -1103,6 +1103,20 @@ public:
                                      ForDefinition_t IsForDefinition
                                        = NotForDefinition);
 
+  /// P3817: mark D as already having had its dynamic initializer emitted
+  /// (matching what EmitCXXGlobalVarDeclInitFunc itself does once it
+  /// finishes), for a decl whose initializer CodeGenFunction emitted some
+  /// other way -- namely, a using-marked binding's holding var, initialized
+  /// inline inside its DecompositionDecl's own ctor rather than via its own
+  /// separate one (see CodeGenFunction::EmitCXXGlobalVarDeclInit). Without
+  /// this, a later independent walk that reaches D again as an ordinary
+  /// VarDecl (e.g. CodeGenModule::EmitDeclContext, which walks every decl in
+  /// a namespace's decl chain, hidden ones included, whenever that namespace
+  /// is reopened) would emit a second, redundant top-level ctor for it.
+  void markCXXGlobalVarDeclInitAlreadyEmitted(const VarDecl *D) {
+    DelayedCXXInitPosition[D] = ~0U;
+  }
+
   /// Return the address of the given function. If Ty is non-null, then this
   /// function will use the specified type if it has to create it.
   llvm::Constant *GetAddrOfFunction(GlobalDecl GD, llvm::Type *Ty = nullptr,
