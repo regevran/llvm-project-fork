@@ -8048,7 +8048,12 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
     if (auto *DD = dyn_cast<DecompositionDecl>(D))
       for (auto *B : DD->flat_bindings())
         if (auto *HD = B->getHoldingVar())
-          EmitGlobal(HD);
+          // P3817: a using-marked binding's holding var is instead
+          // initialized from inside D's own ctor (EmitCXXGlobalVarDeclInit),
+          // immediately before the reused assignment that needs it already
+          // initialized -- see the comment there.
+          if (!B->getReusedAssignment())
+            EmitGlobal(HD);
 
     break;
 
