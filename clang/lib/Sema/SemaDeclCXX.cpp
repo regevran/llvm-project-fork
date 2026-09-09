@@ -1528,12 +1528,28 @@ static bool checkTupleLikeDecomposition(Sema &S,
     if (U.isNull())
       return true;
 
+    IdentifierInfo *BindingId = B->getDeclName().getAsIdentifierInfo();
+    // P3817: a using-marked binding has no name of its own. Locally that's
+    // fine (its holding var is just an anonymous alloca), but one with
+    // global storage duration (namespace scope, or a local `static`) needs
+    // a real mangled linkage name -- Itanium mangling has no general scheme
+    // for an unnamed ordinary VarDecl, only for anonymous unions/structs.
+    // Synthesize one: nothing else can reference it by name, so also give
+    // it internal linkage, regardless of Src's own linkage.
+    bool NeedsSyntheticName = !BindingId && Src->hasGlobalStorage();
+    if (NeedsSyntheticName) {
+      SmallString<32> Name;
+      llvm::raw_svector_ostream OS(Name);
+      OS << "__p3817_using_holding_" << S.P3817HoldingVarCount++;
+      BindingId = &S.Context.Idents.get(OS.str());
+    }
+
     // Don't give this VarDecl a TypeSourceInfo, since this is a synthesized
     // entity and this type was never written in source code.
-    auto *BindingVD =
-        VarDecl::Create(S.Context, Src->getDeclContext(), Loc, Loc,
-                        B->getDeclName().getAsIdentifierInfo(), U,
-                        /*TInfo=*/nullptr, Src->getStorageClass());
+    auto *BindingVD = VarDecl::Create(
+        S.Context, Src->getDeclContext(), Loc, Loc, BindingId, U,
+        /*TInfo=*/nullptr,
+        NeedsSyntheticName ? SC_Static : Src->getStorageClass());
     BindingVD->setLexicalDeclContext(Src->getLexicalDeclContext());
     BindingVD->setTSCSpec(Src->getTSCSpec());
     BindingVD->setConstexpr(Src->isConstexpr());

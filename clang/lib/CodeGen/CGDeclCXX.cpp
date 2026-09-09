@@ -216,8 +216,48 @@ void CodeGenFunction::EmitCXXGlobalVarDeclInit(const VarDecl &D,
     }
     bool NeedsDtor =
         D.needsDestruction(getContext()) == QualType::DK_cxx_destructor;
-    if (PerformInit)
+    if (PerformInit) {
       EmitDeclInit(*this, D, DeclAddr);
+      // P3817: unlike the local-variable path (CodeGenFunction::EmitDecl),
+      // don't go through MaybeEmitDeferredVarDeclInit here -- an ordinary
+      // (non-using-marked) holding var is already emitted independently by
+      // CodeGenModule::EmitTopLevelDecl as its own top-level global with
+      // its own dynamic initializer, so re-emitting it via EmitVarDecl
+      // would wrongly route it through the function-local static's
+      // naming/mangling logic.
+      //
+      // A using-marked binding's holding var is a different story: its
+      // reused assignment needs to read through it, and that only works if
+      // the holding var is initialized first, in the same ctor -- separate
+      // top-level ctors only guarantee relative order via append order into
+      // llvm.global_ctors, and this ctor (D's) is always emitted first (see
+      // EmitTopLevelDecl). So EmitTopLevelDecl deliberately skips emitting
+      // such a holding var itself, and we give it its init here instead,
+      // immediately before the assignment that depends on it.
+      if (auto *DD = dyn_cast<DecompositionDecl>(&D)) {
+        for (auto *B : DD->flat_bindings()) {
+          Expr *Assign = B->getReusedAssignment();
+          if (!Assign)
+            continue;
+          if (auto *HD = B->getHoldingVar()) {
+            // Give HD's global proper definition status ourselves (a
+            // placeholder initializer + internal linkage, matching the
+            // internal-linkage-only name Sema gave it in
+            // checkTupleLikeDecomposition) instead of going through
+            // EmitGlobalVarDefinition -- that would decide HD needs its own
+            // ctor and emit one as a separate top-level function, exactly
+            // the ordering problem this whole block exists to avoid.
+            auto *HDGV =
+                cast<llvm::GlobalVariable>(CGM.GetAddrOfGlobalVar(HD));
+            HDGV->setInitializer(llvm::Constant::getNullValue(
+                HDGV->getValueType()));
+            HDGV->setLinkage(llvm::GlobalValue::InternalLinkage);
+            EmitCXXGlobalVarDeclInit(*HD, HDGV, true);
+          }
+          EmitIgnoredExpr(Assign);
+        }
+      }
+    }
     if (D.getType().isConstantStorage(getContext(), true, !NeedsDtor))
       EmitDeclInvariant(*this, D, DeclPtr);
     else

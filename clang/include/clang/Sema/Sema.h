@@ -1246,6 +1246,12 @@ public:
   /// Track the number of currently active capturing scopes.
   unsigned CapturingFunctionScopes = 0;
 
+  /// P3817: monotonic counter used to synthesize a unique internal-linkage
+  /// name for a using-marked binding's namespace-scope holding var, which
+  /// otherwise has no name of its own (see checkTupleLikeDecomposition in
+  /// SemaDeclCXX.cpp).
+  unsigned P3817HoldingVarCount = 0;
+
   llvm::BumpPtrAllocator BumpAlloc;
 
   /// The kind of translation unit we are processing.
