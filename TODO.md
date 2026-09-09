@@ -51,13 +51,6 @@ as part of this PR.
 
 ## `p3817` branch — engineering gaps
 
-### Bugs found, not yet fixed
-
-- **`failed_p3817_program.cpp`** (repo root, untracked) — the original
-  Compiler Explorer crash report. The specific crash it showed is fixed;
-  the file itself hasn't been revisited to confirm nothing else in it is
-  still open.
-
 ### Not yet implemented (paper features)
 
 - Templates: `using` inside a template body silently does nothing at
@@ -69,12 +62,6 @@ as part of this PR.
 
 ### Test/process gaps
 
-- No Parser-level test for the comma-disambiguation guarantee at the
-  grammar level (only covered today by the execution-based
-  `p3817_test/comma_disambiguation_test.cpp`).
-- No `clang/test/Parse` (or SemaCXX) lit coverage yet for the
-  unary-expression using-target fix (`1678e1bef254`,
-  `using ++x` / `using *p`) — only verified via scratch files so far.
 - No documentation (`ReleaseNotes.rst`, `docs/LanguageExtensions.rst`,
   `clang/www/cxx_status.html`) — not a blocker, since this branch isn't
   intended to land upstream as-is.
