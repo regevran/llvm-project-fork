@@ -460,14 +460,9 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
   for (DeclContext::decl_iterator D = DC->decls_begin(), DEnd = DC->decls_end();
        D != DEnd; ++D) {
 
-    // Don't print ObjCIvarDecls, as they are printed when visiting the
-    // containing ObjCInterfaceDecl.
-    if (isa<ObjCIvarDecl>(*D))
-      continue;
-
-    // Don't print BindingDecls, as they are printed when visiting the
-    // containing DecompositionDecl.
-    if (isa<BindingDecl>(*D))
+    // Don't print ObjCIvarDecls or BindingDecls, as they are printed when
+    // visiting the containing ObjCInterfaceDecl or DecompositionDecl.
+    if (isa<ObjCIvarDecl, BindingDecl>(*D))
       continue;
 
     // Skip over implicit declarations in pretty-printing mode.

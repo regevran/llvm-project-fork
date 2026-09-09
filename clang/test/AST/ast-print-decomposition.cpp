@@ -31,7 +31,7 @@ namespace Array {
 void local() {
   // CHECK-NEXT: int arr[3] = {1, 2, 3};
   int arr[3] = {1, 2, 3};
-  // CHECK-NEXT: auto [a, b, c]
+  // CHECK-NEXT: auto [a, b, c] = {arr[*]};
   auto [a, b, c] = arr;
 }
 } // namespace Array
@@ -71,7 +71,7 @@ namespace Packs {
 template <unsigned N> void local() {
   // CHECK-NEXT: int arr[4] = {1, 2, 3, 4};
   int arr[4] = {1, 2, 3, 4};
-  // CHECK-NEXT: auto [first, ...rest, last]
+  // CHECK-NEXT: auto [first, ...rest, last] = {arr[*]};
   auto [first, ...rest, last] = arr;
 }
 void (*p)() = local<0>;
@@ -83,7 +83,7 @@ using Aggregate::get;
 
 // CHECK-LABEL: void local() {
 void local() {
-  // CHECK-NEXT: auto [x {{\[\[}}maybe_unused{{\]\]}}, y] = get();
+  // CHECK-NEXT: auto [x {{\[\[}}maybe_unused]], y] = get();
   auto [x [[maybe_unused]], y] = get();
 }
 } // namespace Attributes

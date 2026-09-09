@@ -18,7 +18,18 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   structured-binding identifier list — a bare identifier (`using x`) is
   just the simplest case; `using foo()`, `using s[0]`, `using m["k"]`,
   `using obj.member` are all accepted too ("Returned Lvalues" from the
-  paper's "Further Design Decisions").
+  paper's "Further Design Decisions"), and so is a prefix unary operator
+  (`using ++x`, `using *p`) — `Parser::ParseDecompositionDeclarator`'s
+  structured-binding-list-vs-misplaced-array-declarator disambiguation
+  heuristic used to reject these outright, before Sema ever got a chance
+  to accept or reject them on their merits; fixed by recognizing that
+  `using` is a keyword, so this disambiguation never even applies to it in
+  the first place (unlike a bare identifier or an ellipsis, which really
+  can start an array-bound expression, and do need the lookahead). A
+  prefix operator that doesn't yield an lvalue (`using -x`, `using &x`)
+  still correctly fails afterward, at Sema's ordinary assignability check
+  — the fix is only about the parser no longer pre-empting that. Covered
+  by `clang/test/SemaCXX/p3817-using-unary-target.cpp`.
 - The target expression is parsed and resolved via Clang's ordinary
   expression grammar/Sema (`Parser::ParseCastExpression` with
   `CastParseKind::UnaryExprOnly`), so name lookup, implicit member access
@@ -48,20 +59,50 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   target's old value instead of running the assignment or failing to
   compile.)
 - A namespace-scope (global) using-marked decomposition no longer crashes
-  the compiler. Clang mangles the hidden decomposed object's linkage name
-  as `DC<source-name>*E`, built from each binding's name
-  (`ItaniumMangle.cpp`) — but a using-marked binding has no name of its
-  own (`Id` is null), so `mangleSourceName` dereferenced a null
-  `IdentifierInfo*` and segfaulted for anything beyond a purely local
-  binding (the only kind exercised before this was found). Fixed by
-  mangling the using-target's own expression instead of a source-name for
-  that binding, reusing Clang's existing general-purpose expression
-  mangler (`CXXNameMangler::mangleExpression`) — already covers every
-  kind of using-target the grammar allows (a plain reference, a member
-  access, a subscript, a call). Also fixes the ODR concern a naive "skip
-  it" fix would have had: two decompositions that are entirely
-  using-marked, e.g. two `auto [using a, using b] = ...;` with different
-  targets, would otherwise both mangle to the identical bare `DCE`.
+  the compiler, and its assignment now actually runs. Clang mangles the
+  hidden decomposed object's linkage name as `DC<source-name>*E`, built
+  from each binding's name (`ItaniumMangle.cpp`) — but a using-marked
+  binding has no name of its own (`Id` is null), so `mangleSourceName`
+  dereferenced a null `IdentifierInfo*` and segfaulted for anything beyond
+  a purely local binding (the only kind exercised before this was found).
+  Fixed by mangling the using-target's own expression instead of a
+  source-name for that binding, reusing Clang's existing general-purpose
+  expression mangler (`CXXNameMangler::mangleExpression`) — already
+  covers every kind of using-target the grammar allows (a plain
+  reference, a member access, a subscript, a call). Also fixes the ODR
+  concern a naive "skip it" fix would have had: two decompositions that
+  are entirely using-marked, e.g. two `auto [using a, using b] = ...;`
+  with different targets, would otherwise both mangle to the identical
+  bare `DCE`.
+
+  That fix only stopped the crash — the assignment itself still silently
+  didn't run: CodeGen's local-declaration path
+  (`CodeGenFunction::MaybeEmitDeferredVarDeclInit`) was P3817-aware, but
+  the global-variable-definition path never learned about
+  `ReusedAssignment` at all. Fixing this for the aggregate/array
+  decomposition kinds (no per-binding holding var) was direct — emit each
+  binding's reused assignment right after the `DecompositionDecl`'s own
+  init, in its ctor (`CodeGenFunction::EmitCXXGlobalVarDeclInit`). The
+  tuple-like kind (the one with a holding var per binding) needed more
+  care: a using-marked binding's holding var has to be initialized inside
+  that *same* ctor, immediately before the assignment reading through it
+  — two separate top-level ctors only guarantee relative order via append
+  order into `llvm.global_ctors`, which isn't good enough here in either
+  direction (the holding var needs the decomposition's own storage
+  already set, and the assignment needs the holding var already set). So
+  `CodeGenModule::EmitTopLevelDecl` now deliberately skips emitting such a
+  holding var as its own top-level global, and it's given proper
+  definition status and initialized inline instead. That holding var also
+  turned out to need a name: it's unnamed for the same reason a
+  using-marked binding itself is, but Itanium mangling has no scheme for
+  an unnamed *ordinary* `VarDecl` (only for anonymous unions/structs) —
+  `mangleUnqualifiedName`'s unconditional `getType()->castAsRecordDecl()`
+  crashed. Fixed by synthesizing a name only when one is actually needed
+  (global storage duration) and giving it internal linkage, since nothing
+  outside this one translation unit could ever reference it. Covered by
+  `clang/test/CodeGenCXX/p3817-using-global.cpp`, including the mixed
+  marked/unmarked-binding and reopened-namespace cases that most directly
+  exercise this ordering.
 - Exercised by the ad hoc programs under `p3817_test/`, and (partially --
   see below) by `clang/test/{SemaCXX,CodeGenCXX}/p3817-*.cpp` lit tests.
 
@@ -121,13 +162,15 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   real `-verify`/`FileCheck` coverage of name resolution, diagnostics, and
   move-vs-copy codegen selection. `clang/test/SemaCXX/p3817-using-illformed.cpp`
   now also gives real `-verify` coverage for the four fixed ill-formed cases
-  above. Still missing: a Parser-level test for the comma-disambiguation
-  guarantee at the grammar level. `p3817_test/`
-  remains the place for things that need
-  real execution (values, not just diagnostics/IR shape) — see
-  `comma_disambiguation_test.cpp` for why: the SemaCXX test for the same
-  guarantee only proves absence of one failure signature (an arity
-  mismatch), not that the two-way split is semantically correct.
+  above. `clang/test/AST/ast-dump-p3817-using-comma.cpp` gives the
+  comma-disambiguation guarantee a grammar-level check too (structurally,
+  via `-ast-dump`, that `using a, b` always parses as two `BindingDecl`s,
+  regardless of which position is `using`-marked) — `p3817_test/`
+  remains the place for things that need real execution (values, not just
+  diagnostics/IR shape) — see `comma_disambiguation_test.cpp` for why: a
+  structural or `-verify` test for the same guarantee only proves the
+  parse *shape* is right, not that the two-way split is semantically
+  correct at runtime.
 - ~~AST serialization (PCH/modules) untouched.~~ — **fixed.**
   `BindingDecl::ReusedTargetExpr` and `ReusedAssignment` are now written and
   read back by `ASTDeclWriter`/`ASTDeclReader::VisitBindingDecl`, the same
@@ -164,9 +207,12 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   `using`-marked case builds on that: a using-marked binding has no name to
   print, so it prints its target instead (`using x`, `using s.m`, ...).
   Covered by `clang/test/AST/ast-print-p3817-using.cpp`. Structured binding
-  packs (`auto [...rest] = arr;`) remain unprinted correctly (drops the
-  leading `...`) — a separate, pre-existing gap noted in the upstream PR,
-  out of scope here too.
+  packs (`auto [...rest] = arr;`) print their leading `...` correctly too,
+  and each binding's own attributes (`auto [x [[maybe_unused]], y] = ...;`)
+  print as well — both fixed upstream, on the same PR, since found.
+  `DeclPrinter.cpp` and the shared (non-P3817) test files this touches
+  were last synced with the PR's tip (`f7741812f4d6`) alongside this
+  update; only the `using`-marked printing above is P3817-only.
 - ~~No experimental-extension gating or warning.~~ — **fixed.** `using` in
   a structured binding declaration now requires the new
   `-fstructured-binding-assignment` flag (`LangOpts::StructuredBindingAssignment`,
