@@ -53,12 +53,6 @@ as part of this PR.
 
 ### Bugs found, not yet fixed
 
-- **Global-scope using-marked assignment doesn't run at all.** CodeGen's
-  local-decl-init path (`CodeGenFunction::MaybeEmitDeferredVarDeclInit`) is
-  P3817-aware; the global-variable-definition path is not. Verified with a
-  scratch repro (`gx` stays `0` instead of becoming `99`). Silent-wrong-
-  behavior, not a crash — the crash itself is already fixed
-  (`69555cf8481f`).
 - **`failed_p3817_program.cpp`** (repo root, untracked) — the original
   Compiler Explorer crash report. The specific crash it showed is fixed;
   the file itself hasn't been revisited to confirm nothing else in it is
