@@ -24,10 +24,6 @@ closed out, no open items remain there.
 
 ### Test/process gaps
 
-- P3817R1 added a normative left-to-right assignment order guarantee
-  across all three decomposition kinds (see the "Semantics" section of
-  `P3817.md`). Verified correct by inspection, but no dedicated lit test
-  enforces it yet — a future change could silently break it undetected.
 - No documentation (`ReleaseNotes.rst`, `docs/LanguageExtensions.rst`,
   `clang/www/cxx_status.html`) — not a blocker, since this branch isn't
   intended to land upstream as-is.
