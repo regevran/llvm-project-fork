@@ -1,7 +1,7 @@
 # P3817 — Structured Binding Assignments (Clang prototype)
 
 This branch is an experimental, work-in-progress implementation of
-[P3817R0](P3817.md) — an extension letting a structured binding assign to a
+[P3817R1](P3817.md) — an extension letting a structured binding assign to a
 pre-existing variable via the `using` keyword:
 
 ```cpp
@@ -11,6 +11,25 @@ auto [using id, name] = get_record();  // id is assigned; name is declared
 
 This file tracks implementation status. It is not upstream-quality
 documentation and is not meant to be proposed for inclusion in Clang as-is.
+
+## Paper coverage at a glance
+
+A quick-scan complement to the narrative sections below, mapped directly to
+the paper's own section structure — see "What works"/"Known gaps" for the
+history and reasoning behind each status.
+
+| Paper section | Status |
+| --- | --- |
+| [Syntax](P3817.md#syntax) (`using` before a binding-list element) | ✅ Implemented |
+| [Semantics](P3817.md#semantics) (real `operator=`, move/copy per ref-qualifier, left-to-right assignment order) | ✅ Implemented — all 3 decomposition kinds, local + global scope, constant evaluation |
+| [`const`](P3817.md#const) / [`constexpr`](P3817.md#constexpr) | ⚠️ Ill-formed by default (matches the paper); opt-outable via `-fstructured-binding-assignment-allow-const` |
+| [Storage Class](P3817.md#storage-class) (`static`/`thread_local`) | ✅ Implemented (ill-formed) |
+| [`constinit`](P3817.md#constinit) | ✅ Implemented (ill-formed, follows from Storage Class) |
+| [Returned Lvalues](P3817.md#returned-lvalues) (`using foo()`, `using s[0]`, `using obj.member`) | ✅ Implemented |
+| [C++26 `_` Placeholder](P3817.md#c26-_-placeholder) | ✅ Implemented (rejected) |
+| [Duplicate Variables](P3817.md#duplicate-variables-ill-formed-for-assigned-elements) | ✅ Implemented (rejected) |
+| [Packs](P3817.md#packs) (`using ...expr`) | ❌ Not implemented |
+| Templates (re-derivation at instantiation) | ❌ Not implemented |
 
 ## What works
 
@@ -253,7 +272,7 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
 
 ## Layout
 
-- `P3817.md` — the paper text (P3817R0)
+- `P3817.md` — the paper text (P3817R1)
 - `clang/include/clang/Sema/DeclSpec.h`, `clang/lib/Parse/ParseDecl.cpp` —
   grammar
 - `clang/include/clang/AST/DeclCXX.h` — `BindingDecl` data model
