@@ -26,8 +26,8 @@ history and reasoning behind each status.
 | [Storage Class](P3817.md#storage-class) (`static`/`thread_local`) | ✅ Implemented (ill-formed) |
 | [`constinit`](P3817.md#constinit) | ✅ Implemented (ill-formed, follows from Storage Class) |
 | [Returned Lvalues](P3817.md#returned-lvalues) (`using foo()`, `using s[0]`, `using obj.member`) | ✅ Implemented |
-| [C++26 `_` Placeholder](P3817.md#c26-_-placeholder) | ✅ Implemented (rejected) |
-| [Duplicate Variables](P3817.md#duplicate-variables-ill-formed-for-assigned-elements) | ✅ Implemented (rejected) |
+| [C++26 `_` Placeholder](P3817.md#c26-_-placeholder) | ✅ Implemented (ill-formed) |
+| [Duplicate Variables](P3817.md#duplicate-variables-ill-formed-for-assigned-elements) | ✅ Implemented (ill-formed) |
 | [Packs](P3817.md#packs) (`using ...expr`) | ❌ Not implemented |
 | Templates (re-derivation at instantiation) | ❌ Not implemented |
 
