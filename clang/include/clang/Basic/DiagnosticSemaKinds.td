@@ -647,6 +647,11 @@ def err_decomp_decl_spec
 def err_decomp_decl_using_bad_spec : Error<
   "structured binding declaration with a 'using'-marked element cannot be "
   "declared '%0'">;
+def err_decomp_decl_using_const : Error<
+  "structured binding declaration with a 'using'-marked element cannot be "
+  "'%0'; pass -Xclang -fstructured-binding-assignment-allow-const to allow "
+  "this ('%0' applies only to the hidden decomposed object, never to the "
+  "using-marked targets)">;
 def err_decomp_decl_using_duplicate_target : Error<
   "'using' target already appears earlier in this structured binding "
   "declaration">;

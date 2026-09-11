@@ -138,14 +138,27 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
     placeholder happens to be in scope (Sema only diagnoses a *reference*
     to `_` when it's ambiguous between multiple placeholders, not when
     there's a lone one to resolve to unambiguously).
-  - **`const` on the structured binding itself with `using`-elements:
-    intentionally not implemented.** The paper mandates this as
-    ill-formed (only "target is const" is currently checked, which is a
-    different, narrower rule), but that's the paper authors' own judgment
-    call (see "Alternative Considered" under `#const` in `P3817.md`), not
-    a language constraint, and it's the kind of decision EWGI/EWG
-    discussion is likely to revisit. Deferred rather than implemented
-    against a rule expected to change.
+  - ~~`const`/`constexpr` on the structured binding itself with
+    `using`-elements~~ — **fixed, and made configurable.** The paper
+    mandates this as ill-formed (see "Alternative Considered" under
+    `#const` in `P3817.md`), and that's the default here too. But it's the
+    paper authors' own judgment call, not a language constraint forced by
+    anything else in the design -- the "Alternative Considered" behavior
+    (`const` applies only to the hidden decomposed object `e`, never to a
+    using-marked target, which keeps its own pre-existing type; the reused
+    assignment correctly selects copy instead of move, since `e`'s members
+    become const lvalues) turned out to already be fully implemented and
+    correct, simply because nothing had ever added the paper's rejection.
+    Rather than just enforce the paper's rule outright, added it as the
+    *default*, opt-outable via `-fstructured-binding-assignment-allow-const`
+    -- since the underlying alternative already works, gating it behind a
+    flag is strictly cheaper than re-implementing it later if EWG/EWGI
+    revisits this judgment call. Covered by
+    `clang/test/SemaCXX/p3817-using-illformed.cpp`'s `ConstQualifier`
+    namespace (default-rejecting behavior) and
+    `clang/test/SemaCXX/p3817-using-allow-const.cpp` +
+    `clang/test/CodeGenCXX/p3817-using-allow-const.cpp` (the flag actually
+    enabling it, and selecting copy correctly).
   - ~~Attributes after a `using`-marked element~~ — **fixed.** No
     attribute-specifier-seq appears in the using-marked alternative of
     sb-identifier — attributes appertain to a newly declared variable, and
@@ -230,10 +243,9 @@ documentation and is not meant to be proposed for inclusion in Clang as-is.
   `%clang_cc1` (every lit test here) but not yet exposed as a stable
   top-level driver flag. Added purely as an exercise in gating an
   experimental extension properly, since this branch was never intended to
-  land upstream as-is — a natural next step this makes possible, not done
-  here, is per-flavor sub-flags (e.g. an
-  `-fstructured-binding-assignment-allow-const` to toggle the deferred
-  `const` ill-formed-ness question from the "paper features" section
+  land upstream as-is. This is also the model the later
+  `-fstructured-binding-assignment-allow-const` sub-flag follows (see the
+  `const`/`constexpr` entry under "Paper features not yet implemented"
   above).
 - **No documentation.** No `ReleaseNotes.rst` entry, no
   `docs/LanguageExtensions.rst` mention, no `clang/www/cxx_status.html`

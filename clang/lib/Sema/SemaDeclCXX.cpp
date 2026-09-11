@@ -908,11 +908,28 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
         !getLangOpts().CPlusPlus26)
       DiagBadSpecifier(DeclSpec::getSpecifierName(ConstexprSpec),
                        DS.getConstexprSpecLoc());
+    else if (HasUsingElement &&
+             !getLangOpts().StructuredBindingAssignmentAllowConst)
+      // P3817: constexpr implies const, so it's ill-formed for the same
+      // reason plain const is (see below) -- const only applies to the
+      // hidden decomposed object, never to a using-marked target.
+      Diag(DS.getConstexprSpecLoc(), diag::err_decomp_decl_using_const)
+          << DeclSpec::getSpecifierName(ConstexprSpec);
   }
 
   // We can't recover from it being declared as a typedef.
   if (DS.getStorageClassSpec() == DeclSpec::SCS_typedef)
     return nullptr;
+
+  // P3817: const only applies to the hidden decomposed object, never to a
+  // using-marked target -- ill-formed by default (see "Alternative
+  // Considered" under #const in P3817.md); opt-outable via a dedicated
+  // flag, since the resulting behavior (the reused assignment copies
+  // instead of moves) is already fully implemented and correct, just not
+  // permitted by the paper itself.
+  if ((DS.getTypeQualifiers() & DeclSpec::TQ_const) && HasUsingElement &&
+      !getLangOpts().StructuredBindingAssignmentAllowConst)
+    Diag(DS.getConstSpecLoc(), diag::err_decomp_decl_using_const) << "const";
 
   // C++2a [dcl.struct.bind]p1:
   //   A cv that includes volatile is deprecated

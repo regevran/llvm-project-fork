@@ -4136,6 +4136,15 @@ defm structured_binding_assignment : BoolFOption<"structured-binding-assignment"
           "Enable P3817 structured binding assignment ('using'-marked "
           "bindings)">,
   NegFlag<SetFalse>>, ShouldParseIf<cplusplus.KeyPath>;
+defm structured_binding_assignment_allow_const :
+  BoolFOption<"structured-binding-assignment-allow-const",
+  LangOpts<"StructuredBindingAssignmentAllowConst">, DefaultFalse,
+  PosFlag<SetTrue, [], [CC1Option],
+          "Allow 'const'/'constexpr' on a structured binding declaration "
+          "with a 'using'-marked element (P3817 leaves this ill-formed by "
+          "default; 'const' applies only to the hidden decomposed object, "
+          "never to the using-marked targets)">,
+  NegFlag<SetFalse>>, ShouldParseIf<cplusplus.KeyPath>;
 defm sized_deallocation : BoolFOption<"sized-deallocation",
   LangOpts<"SizedDeallocation">, Default<cpp14.KeyPath>,
   PosFlag<SetTrue, [], [], "Enable C++14 sized global deallocation functions">,

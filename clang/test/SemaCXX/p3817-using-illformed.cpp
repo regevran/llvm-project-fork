@@ -34,6 +34,39 @@ void ok() {
 }
 } // namespace StorageClass
 
+namespace ConstQualifier {
+// const only applies to the hidden decomposed object, never to a
+// using-marked target -- ill-formed by default (opt-outable via
+// -fstructured-binding-assignment-allow-const, see
+// p3817-using-allow-const.cpp).
+void f() {
+  int x;
+  const auto [using x, y] = get();
+  // expected-error@-1 {{structured binding declaration with a 'using'-marked element cannot be 'const'; pass -Xclang -fstructured-binding-assignment-allow-const to allow this ('const' applies only to the hidden decomposed object, never to the using-marked targets)}}
+  (void)y;
+}
+
+// constexpr implies const, so it's ill-formed for the same reason.
+constexpr Pair getConstexpr() { return {1, 2}; }
+void g() {
+  int x;
+  constexpr auto [using x, y] = getConstexpr();
+  // expected-error@-1 {{structured binding declaration with a 'using'-marked element cannot be 'constexpr'; pass -Xclang -fstructured-binding-assignment-allow-const to allow this ('constexpr' applies only to the hidden decomposed object, never to the using-marked targets)}}
+  (void)y;
+}
+
+// Non-using elements in the same list are unaffected when there is no
+// using-marked element at all.
+void ok() {
+  const auto [cx, cy] = get();
+  constexpr auto [x, y] = getConstexpr();
+  (void)cx;
+  (void)cy;
+  (void)x;
+  (void)y;
+}
+} // namespace ConstQualifier
+
 namespace DuplicateTarget {
 // Using the same variable more than once in a using-marked binding list is
 // ill-formed, even for a type whose operator= would tolerate it.
