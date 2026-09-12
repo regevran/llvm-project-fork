@@ -1710,6 +1710,20 @@ Decl *TemplateDeclInstantiator::VisitBindingDecl(BindingDecl *D) {
   NewBD->setReferenced(D->isReferenced());
   SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, NewBD);
 
+  // P3817: a using-marked binding's target expression may reference template
+  // parameters or earlier local variables (which need to be mapped to their
+  // instantiated counterparts), so it needs the same substitution any other
+  // expression attached to the template pattern gets. The resulting
+  // assignment itself (ReusedAssignment) isn't cloned here -- it's rebuilt
+  // from scratch once this DecompositionDecl is completed (see
+  // BuildP3817ReusedAssignments), the same way it is for a non-template
+  // decomposition.
+  if (Expr *OldTarget = D->getReusedTargetExpr()) {
+    ExprResult NewTarget = SemaRef.SubstExpr(OldTarget, TemplateArgs);
+    if (!NewTarget.isInvalid())
+      NewBD->setReusedTargetExpr(NewTarget.get());
+  }
+
   return NewBD;
 }
 
