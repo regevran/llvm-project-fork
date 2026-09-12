@@ -27,10 +27,11 @@ closed out, no open items remain there.
   duplicate-using-target check per instantiation (two using-targets that
   are distinct as written, e.g. `using arr[I], using arr[J]`, can still
   collide once a specific instantiation's arguments are known -- the
-  as-written check can't see that).
-  Still open: whether a using-marked binding inside a lambda body nested in
-  a template goes through this same path or needs separate handling --
-  not yet checked.
+  as-written check can't see that). Verified this also covers a
+  using-marked binding inside a lambda nested in a template with no
+  further changes -- a lambda's call operator body is instantiated
+  through the same TemplateDeclInstantiator/TreeTransform machinery, so
+  there was never a separate path to fix.
 - Packs (`using ...expr`) — not implemented, deferred alongside templates.
 
 ### Test/process gaps
