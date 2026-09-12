@@ -105,6 +105,21 @@ int& ref();
 void distinct_calls_not_flagged() {
   auto [using ref(), using ref()] = get();
 }
+
+// A collision can also arise only once a template is instantiated with
+// specific arguments -- the as-written check above can't see this, since
+// arr[I] and arr[J] are distinct template parameters until substituted.
+template <int I, int J> void from_template(int (&arr)[2]) {
+  auto &[using arr[I], using arr[J]] = arr;
+  // expected-error@-1 {{'using' target already appears earlier in this structured binding declaration}}
+  // expected-note@-2 {{previous 'using' target specified here}}
+}
+template void from_template<0, 0>(int (&)[2]);
+// expected-note@-1 {{in instantiation of function template specialization 'DuplicateTarget::from_template<0, 0>' requested here}}
+
+// A different pair of arguments is a genuinely different pair of targets --
+// not a duplicate.
+template void from_template<0, 1>(int (&)[2]);
 } // namespace DuplicateTarget
 
 namespace UsingPlaceholder {

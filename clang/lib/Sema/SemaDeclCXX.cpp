@@ -806,6 +806,32 @@ static bool P3817RefersToSameUsingTarget(const Expr *E1, const Expr *E2) {
   }
 }
 
+// P3817: walk Bindings once, diagnosing the first using-marked binding whose
+// target expression refers to the same entity as an earlier one in the same
+// list. Shared between the as-written declaration (Bindings holds the
+// as-parsed target expressions) and, separately, each template
+// instantiation of one (Bindings holds the substituted target expressions,
+// which may only coincide for that particular instantiation).
+void Sema::CheckP3817DuplicateUsingTargets(ArrayRef<BindingDecl *> Bindings) {
+  SmallVector<const Expr *, 4> SeenUsingTargets;
+  for (BindingDecl *BD : Bindings) {
+    const Expr *Target = BD->getReusedTargetExpr();
+    if (!Target)
+      continue;
+
+    for (const Expr *Prev : SeenUsingTargets) {
+      if (P3817RefersToSameUsingTarget(Prev, Target)) {
+        Diag(Target->getExprLoc(), diag::err_decomp_decl_using_duplicate_target)
+            << Target->getSourceRange();
+        Diag(Prev->getExprLoc(), diag::note_decomp_decl_using_previous_target)
+            << Prev->getSourceRange();
+        break;
+      }
+    }
+    SeenUsingTargets.push_back(Target);
+  }
+}
+
 NamedDecl *
 Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
                                    MultiTemplateParamsArg TemplateParamLists) {
@@ -984,10 +1010,6 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
   // Build the BindingDecls.
   SmallVector<BindingDecl*, 8> Bindings;
 
-  // P3817: using-targets seen so far, to diagnose a target repeated later
-  // in the same binding list (`auto [using x, using x] = ...;`).
-  SmallVector<const Expr *, 4> SeenUsingTargets;
-
   // Build the BindingDecls.
   for (auto &B : D.getDecompositionDeclarator().bindings()) {
 
@@ -1009,24 +1031,12 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
       // target expression. Whether it's actually a modifiable lvalue is
       // checked later, when the real `target = source` assignment is built
       // (see BuildP3817ReusedAssignments), the same way an ordinary
-      // assignment statement would be.
+      // assignment statement would be. A target that duplicates an earlier
+      // one in this same binding list is diagnosed once, after all bindings
+      // below have been built (see CheckP3817DuplicateUsingTargets).
       auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, /*Id=*/nullptr, QT);
-      if (B.UsingTargetExpr) {
+      if (B.UsingTargetExpr)
         BD->setReusedTargetExpr(B.UsingTargetExpr);
-
-        for (const Expr *Prev : SeenUsingTargets) {
-          if (P3817RefersToSameUsingTarget(Prev, B.UsingTargetExpr)) {
-            Diag(B.UsingTargetExpr->getExprLoc(),
-                 diag::err_decomp_decl_using_duplicate_target)
-                << B.UsingTargetExpr->getSourceRange();
-            Diag(Prev->getExprLoc(),
-                 diag::note_decomp_decl_using_previous_target)
-                << Prev->getSourceRange();
-            break;
-          }
-        }
-        SeenUsingTargets.push_back(B.UsingTargetExpr);
-      }
       Bindings.push_back(BD);
       ParsingInitForAutoVars.insert(BD);
       continue;
@@ -1093,6 +1103,8 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
     Bindings.push_back(BD);
     ParsingInitForAutoVars.insert(BD);
   }
+
+  CheckP3817DuplicateUsingTargets(Bindings);
 
   // There are no prior lookup results for the variable itself, because it
   // is unnamed.

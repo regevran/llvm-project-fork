@@ -6529,6 +6529,15 @@ public:
                                               SourceLocation Loc);
   void CheckCompleteDecompositionDeclaration(DecompositionDecl *DD);
 
+  /// P3817: diagnose using-marked bindings within a single decomposition
+  /// declaration that target the same entity (e.g. `using x, using x`, or
+  /// `using arr[I], using arr[J]` once I and J are substituted to the same
+  /// value). Called once all of a decomposition's BindingDecls exist --
+  /// both for an ordinary declaration and, separately, for each template
+  /// instantiation of one (a pattern's using-targets may only turn out to
+  /// collide for a particular set of template arguments).
+  void CheckP3817DuplicateUsingTargets(ArrayRef<BindingDecl *> Bindings);
+
   /// Stack containing information needed when in C++2a an 'auto' is encountered
   /// in a function declaration parameter type specifier in order to invent a
   /// corresponding template parameter in the enclosing abbreviated function
