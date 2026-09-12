@@ -18,8 +18,19 @@ closed out, no open items remain there.
 
 ### Not yet implemented (paper features)
 
-- Templates: `using` inside a template body silently does nothing at
-  instantiation (no re-derivation, no diagnostic).
+- Templates: a `using`-marked binding inside a (non-lambda) template
+  function body is now correctly re-derived at each instantiation --
+  `TemplateDeclInstantiator::VisitBindingDecl` used to clone a `BindingDecl`
+  without its P3817 target expression at all, so `using` silently did
+  nothing post-instantiation. Fixed in two steps: propagating the
+  (substituted) target expression itself, and re-running the
+  duplicate-using-target check per instantiation (two using-targets that
+  are distinct as written, e.g. `using arr[I], using arr[J]`, can still
+  collide once a specific instantiation's arguments are known -- the
+  as-written check can't see that).
+  Still open: whether a using-marked binding inside a lambda body nested in
+  a template goes through this same path or needs separate handling --
+  not yet checked.
 - Packs (`using ...expr`) — not implemented, deferred alongside templates.
 
 ### Test/process gaps
