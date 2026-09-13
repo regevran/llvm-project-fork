@@ -29,7 +29,7 @@ history and reasoning behind each status.
 | [C++26 `_` Placeholder](P3817.md#c26-_-placeholder) | ✅ Implemented (ill-formed) |
 | [Duplicate Variables](P3817.md#duplicate-variables-ill-formed-for-assigned-elements) | ✅ Implemented (ill-formed) |
 | [Packs](P3817.md#packs) (`using ...expr`) | ❌ Not implemented |
-| Templates (re-derivation at instantiation) | ❌ Not implemented |
+| Templates (re-derivation at instantiation) | ✅ Implemented — target re-derived per instantiation, including inside a lambda nested in a template; duplicate-target check re-run per instantiation |
 
 ## What works
 
@@ -122,6 +122,28 @@ history and reasoning behind each status.
   `clang/test/CodeGenCXX/p3817-using-global.cpp`, including the mixed
   marked/unmarked-binding and reopened-namespace cases that most directly
   exercise this ordering.
+- A using-marked binding inside a template body now correctly re-derives its
+  target and assignment at each instantiation, instead of silently doing
+  nothing. `TemplateDeclInstantiator::VisitBindingDecl` used to clone a
+  `BindingDecl` without its P3817 target expression at all; fixed by
+  substituting the target expression the same way any other pattern
+  expression is substituted (`SemaRef.SubstExpr`) — the reused *assignment*
+  itself isn't cloned, it's rebuilt from scratch once the instantiated
+  `DecompositionDecl` is completed, the same way it is for a non-template
+  decomposition. Two using-targets that are distinct as written (e.g.
+  `using arr[I], using arr[J]`) can still collide once a specific
+  instantiation's arguments are substituted in — the as-written duplicate
+  check can't see that, since it only ever runs once, on the unsubstituted
+  pattern — so the check (`CheckP3817DuplicateUsingTargets`) was pulled out
+  into a shared `Sema` member and re-run per instantiation too. Verified
+  this also covers a using-marked binding inside a lambda nested in a
+  template with no further changes: a lambda's call-operator body is
+  instantiated through the same `TemplateDeclInstantiator`/`TreeTransform`
+  machinery as any other function body, so there was never a separate path
+  to fix. Covered by `clang/test/CodeGenCXX/p3817-using-template.cpp`,
+  `clang/test/CodeGenCXX/p3817-using-template-lambda.cpp`, and the
+  `from_template` case in `clang/test/SemaCXX/p3817-using-illformed.cpp`'s
+  `DuplicateTarget` namespace.
 - Exercised by the ad hoc programs under `p3817_test/`, and (partially --
   see below) by `clang/test/{SemaCXX,CodeGenCXX}/p3817-*.cpp` lit tests.
 
@@ -129,62 +151,7 @@ history and reasoning behind each status.
 
 ### Paper features not yet implemented
 
-- **Templates.** The using-target is resolved once, at initial parse of the
-  template; nothing re-derives it at instantiation. `using` inside a
-  template body currently compiles clean but silently does nothing —
-  no diagnostic.
-- **Packs** (`using ...expr`). Not implemented; deferred alongside
-  templates.
-- Several paper-mandated ill-formed cases were silently accepted instead of
-  rejected; four are now fixed, one is intentionally deferred (verified —
-  no diagnostic, no crash, just wrong behavior):
-  - ~~Duplicate using-targets in one binding list~~ — **fixed.**
-    `auto [using x, using x] = ...;` is now rejected, along with the same
-    variable reached through a member-access or constant-index-subscript
-    chain (`using s.m` / `using arr[0]` repeated). Detection is
-    intentionally conservative/structural (same idea as the existing
-    self-comparison-warning helper `Expr::isSameComparisonOperand`, entered
-    directly since using-targets are unconverted lvalues): two using-targets
-    that are function calls (`using foo()`) are never flagged, since two
-    calls need not return the same lvalue.
-  - ~~`static`/`thread_local` combined with `using`~~ — **fixed.** Unlike
-    ordinary structured bindings (where C++20 permits these), the
-    combination is now always ill-formed when the binding list has a
-    using-marked element.
-  - ~~`using` on the `_` placeholder~~ — **fixed.** Rejected at the parser
-    level, before it ever reaches ordinary expression Sema: leaving it to
-    expression lookup would silently accept `using _` whenever exactly one
-    placeholder happens to be in scope (Sema only diagnoses a *reference*
-    to `_` when it's ambiguous between multiple placeholders, not when
-    there's a lone one to resolve to unambiguously).
-  - ~~`const`/`constexpr` on the structured binding itself with
-    `using`-elements~~ — **fixed, and made configurable.** The paper
-    mandates this as ill-formed (see "Alternative Considered" under
-    `#const` in `P3817.md`), and that's the default here too. But it's the
-    paper authors' own judgment call, not a language constraint forced by
-    anything else in the design -- the "Alternative Considered" behavior
-    (`const` applies only to the hidden decomposed object `e`, never to a
-    using-marked target, which keeps its own pre-existing type; the reused
-    assignment correctly selects copy instead of move, since `e`'s members
-    become const lvalues) turned out to already be fully implemented and
-    correct, simply because nothing had ever added the paper's rejection.
-    Rather than just enforce the paper's rule outright, added it as the
-    *default*, opt-outable via `-fstructured-binding-assignment-allow-const`
-    -- since the underlying alternative already works, gating it behind a
-    flag is strictly cheaper than re-implementing it later if EWG/EWGI
-    revisits this judgment call. Covered by
-    `clang/test/SemaCXX/p3817-using-illformed.cpp`'s `ConstQualifier`
-    namespace (default-rejecting behavior) and
-    `clang/test/SemaCXX/p3817-using-allow-const.cpp` +
-    `clang/test/CodeGenCXX/p3817-using-allow-const.cpp` (the flag actually
-    enabling it, and selecting copy correctly).
-  - ~~Attributes after a `using`-marked element~~ — **fixed.** No
-    attribute-specifier-seq appears in the using-marked alternative of
-    sb-identifier — attributes appertain to a newly declared variable, and
-    a using-marked element introduces none. (Unlike `const`, there's no
-    known EWG sentiment either way on this one; implemented anyway since
-    the fix reuses `Parser::DiagnoseAndSkipCXX11Attributes()`, already
-    used elsewhere in the same function for the same purpose.)
+- **Packs** (`using ...expr`). Not implemented.
 
 ### Engineering / process gaps
 
@@ -193,8 +160,10 @@ history and reasoning behind each status.
   `clang/test/CodeGenCXX/p3817-using.cpp` now give `ninja check-clang`
   real `-verify`/`FileCheck` coverage of name resolution, diagnostics, and
   move-vs-copy codegen selection. `clang/test/SemaCXX/p3817-using-illformed.cpp`
-  now also gives real `-verify` coverage for the four fixed ill-formed cases
-  above. `clang/test/AST/ast-dump-p3817-using-comma.cpp` gives the
+  gives real `-verify` coverage for the paper-mandated ill-formed cases
+  (duplicate using-targets, `static`/`thread_local`, `using` on the `_`
+  placeholder, `const`/`constexpr`, attributes after a using-marked
+  element). `clang/test/AST/ast-dump-p3817-using-comma.cpp` gives the
   comma-disambiguation guarantee a grammar-level check too (structurally,
   via `-ast-dump`, that `using a, b` always parses as two `BindingDecl`s,
   regardless of which position is `using`-marked) — `p3817_test/`
@@ -203,69 +172,6 @@ history and reasoning behind each status.
   structural or `-verify` test for the same guarantee only proves the
   parse *shape* is right, not that the two-way split is semantically
   correct at runtime.
-- ~~AST serialization (PCH/modules) untouched.~~ — **fixed.**
-  `BindingDecl::ReusedTargetExpr` and `ReusedAssignment` are now written and
-  read back by `ASTDeclWriter`/`ASTDeclReader::VisitBindingDecl`, the same
-  way the pre-existing `Binding` field always was. Verified end-to-end by
-  hand (not just re-reading the two fields) both ways the paper's gap
-  description names: a PCH boundary and a C++20 named-module boundary, in
-  each case by having the assignment actually run *after* the round trip
-  and observing the target's new value — since it's easy to write a
-  serialization fix that reads back non-null-but-wrong exprs and still pass
-  a naive test. `clang/test/PCH/p3817-using.cpp` gives this regression
-  coverage (the module boundary isn't separately covered — no existing test
-  in this tree covers *any* decomposition declaration across a module
-  boundary, using-marked or not, and both boundaries share the exact same
-  `ASTWriter`/`ASTReader` code this fix touches).
-- ~~No `-ast-dump` support.~~ — **fixed.** `TextNodeDumper::VisitBindingDecl`
-  now appends a ` using` marker to a using-marked binding's header line, and
-  `ASTNodeTraverser::VisitBindingDecl` dumps its target and the built
-  assignment as children — instead of `getBinding()`, which is already
-  reachable as the assignment's source operand, so dumping both would show
-  the same subexpression twice. This shared traversal is also what
-  `-ast-dump=json` walks, so JSON dumps pick up the same two children with
-  no separate change. Covered by `clang/test/AST/ast-dump-p3817-using.cpp`.
-- ~~No `-ast-print` support.~~ — **fixed.** `DeclPrinter` had no
-  decomposition-declaration support at all, `using`-marked or not:
-  `auto [x, y] = get();` printed as `auto = get();`, silently dropping the
-  whole `[x, y]` pattern (worse at namespace scope: two bogus empty
-  statements too, since each `BindingDecl` is a separate `DeclContext`
-  sibling there, unlike the local case). The general fix
-  (`DeclPrinter::VisitDecompositionDecl`, covering aggregate/array/
-  tuple-like decomposition) is a pre-existing Clang gap unrelated to P3817,
-  submitted upstream separately:
-  [llvm/llvm-project#221711](https://github.com/llvm/llvm-project/pull/221711),
-  covered by `clang/test/AST/ast-print-decomposition.cpp`. The
-  `using`-marked case builds on that: a using-marked binding has no name to
-  print, so it prints its target instead (`using x`, `using s.m`, ...).
-  Covered by `clang/test/AST/ast-print-p3817-using.cpp`. Structured binding
-  packs (`auto [...rest] = arr;`) print their leading `...` correctly too,
-  and each binding's own attributes (`auto [x [[maybe_unused]], y] = ...;`)
-  print as well — both fixed upstream, on the same PR, since found.
-  `DeclPrinter.cpp` and the shared (non-P3817) test files this touches
-  were last synced with the PR's tip (`f7741812f4d6`) alongside this
-  update; only the `using`-marked printing above is P3817-only.
-- ~~No experimental-extension gating or warning.~~ — **fixed.** `using` in
-  a structured binding declaration now requires the new
-  `-fstructured-binding-assignment` flag (`LangOpts::StructuredBindingAssignment`,
-  a plain `BoolFOption` in `Options.td`, modeled directly on
-  `-freflection`'s gating of C++26 reflection — the closest real precedent
-  for "a paper not yet in any shipped standard"). Without it,
-  `Parser::ParseDecompositionDeclarator` rejects `using` there with a
-  friendly `err_decomp_decl_using_not_enabled` diagnostic naming the flag,
-  in every `-std=` mode, instead of silently accepting it. Gated at the
-  parser only — nothing downstream (Sema/CodeGen/Serialization) can be
-  reached with `using`-marked bindings if the parser never produces one.
-  Covered by `clang/test/SemaCXX/p3817-using-not-enabled.cpp`; every other
-  P3817 test's `RUN:` line now passes the flag. `-fstructured-binding-assignment`
-  is `CC1Option`-only (again matching `-freflection`), so it's usable via
-  `%clang_cc1` (every lit test here) but not yet exposed as a stable
-  top-level driver flag. Added purely as an exercise in gating an
-  experimental extension properly, since this branch was never intended to
-  land upstream as-is. This is also the model the later
-  `-fstructured-binding-assignment-allow-const` sub-flag follows (see the
-  `const`/`constexpr` entry under "Paper features not yet implemented"
-  above).
 - **No documentation.** No `ReleaseNotes.rst` entry, no
   `docs/LanguageExtensions.rst` mention, no `clang/www/cxx_status.html`
   entry.
@@ -278,6 +184,8 @@ history and reasoning behind each status.
 - `clang/include/clang/AST/DeclCXX.h` — `BindingDecl` data model
 - `clang/lib/Sema/SemaDeclCXX.cpp` — name resolution and assignment
   building
+- `clang/lib/Sema/SemaTemplateInstantiateDecl.cpp` — re-deriving a
+  using-target at template instantiation
 - `clang/lib/CodeGen/CGDecl.cpp` — codegen
 - `clang/test/SemaCXX/p3817-*.cpp`, `clang/test/CodeGenCXX/p3817-using.cpp` —
   lit tests (`ninja check-clang`)
