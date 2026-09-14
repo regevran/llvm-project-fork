@@ -7076,7 +7076,13 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
 
     SourceLocation EllipsisLoc;
 
-    if (Tok.is(tok::ellipsis)) {
+    // P3817: a using-marked pack element spells its ellipsis as
+    // 'using ...target', not '...using target' -- so a leading ellipsis
+    // immediately followed by 'using' is *not* this (plain-alternative)
+    // pack-name marker; leave it unconsumed and let the code below give it
+    // its own diagnostic instead of silently treating it as if it were the
+    // plain form.
+    if (Tok.is(tok::ellipsis) && NextToken().isNot(tok::kw_using)) {
       DiagCompat(Tok, diag_compat::binding_pack);
       if (PrevEllipsisLoc.isValid()) {
         Diag(Tok, diag::err_binding_multiple_ellipses);
@@ -7099,6 +7105,21 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
     }
     if (UsedDeclaration) {
         ConsumeToken();
+    }
+
+    // P3817: 'using ...target' -- target must itself already denote a pack
+    // (e.g. a function parameter pack); each remaining position in the
+    // binding list is reused-assigned from the corresponding element of its
+    // expansion. Checked for real once target is parsed, below.
+    if (UsedDeclaration && Tok.is(tok::ellipsis)) {
+      if (PrevEllipsisLoc.isValid()) {
+        Diag(Tok, diag::err_binding_multiple_ellipses);
+        Diag(PrevEllipsisLoc, diag::note_previous_ellipsis);
+        break;
+      }
+      EllipsisLoc = Tok.getLocation();
+      PrevEllipsisLoc = EllipsisLoc;
+      ConsumeToken();
     }
 
     SourceLocation Loc = Tok.getLocation();
@@ -7147,6 +7168,22 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
                                 true);
       EllipsisLoc = Tok.getLocation();
       ConsumeToken();
+    }
+
+    // P3817: now that this element's final ellipsis position (if any) is
+    // known -- 'using ...target' above, or a misplaced 'using target...'
+    // just recovered immediately above -- mark a pack-expanded using-target
+    // as a real pack expansion the same way any other expression containing
+    // an unexpanded pack is marked (e.g. a call argument's trailing '...');
+    // this both rejects a target that doesn't actually denote a pack and
+    // keeps it from tripping the unrelated "expression contains unexpanded
+    // parameter pack" diagnostic every other unmarked pack reference gets.
+    if (UsedDeclaration && EllipsisLoc.isValid() && UsingTargetExpr) {
+      ExprResult Expansion =
+          Actions.ActOnPackExpansion(UsingTargetExpr, EllipsisLoc);
+      if (Expansion.isInvalid())
+        break;
+      UsingTargetExpr = Expansion.get();
     }
 
     ParsedAttributes Attrs(AttrFactory);

@@ -657,6 +657,8 @@ def err_decomp_decl_using_duplicate_target : Error<
   "declaration">;
 def note_decomp_decl_using_previous_target : Note<
   "previous 'using' target specified here">;
+def err_decomp_decl_using_pack_not_supported : Error<
+  "'using' pack target must be a reference to an existing pack">;
 def err_decomp_decl_type : Error<
   "structured binding declaration cannot be declared with type %0; "
   "declared type must be 'auto' or reference to 'auto'">;

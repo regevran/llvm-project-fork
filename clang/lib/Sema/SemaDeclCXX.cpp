@@ -1133,6 +1133,40 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
   return New;
 }
 
+// P3817: a using-pack's target is dependent (not yet resolvable) exactly
+// when its pattern (the pack-expansion wrapper peeled off) is still a bare
+// reference to a pack -- i.e. we're processing the enclosing template's
+// pattern, not one of its instantiations. Once instantiated,
+// TemplateDeclInstantiator::VisitBindingDecl has already substituted that
+// same target expression (the same SubstExpr call Spot A added for a
+// non-pack using-target); substituting a pack-expansion's bare-pack-name
+// pattern is what TreeTransform::TransformPackExpansionExpr does for any
+// such reference once the pack it names is resolvable, and it comes back as
+// a FunctionParmPackExpr, not a DeclRefExpr anymore (verified via
+// -ast-dump). So no separate resolution step is needed here at all -- Spot
+// A's substitution already did it as a side effect.
+static bool P3817UsingPackStillDependent(BindingDecl *BD) {
+  auto *Expansion = cast<PackExpansionExpr>(BD->getReusedTargetExpr());
+  return isa<DeclRefExpr>(Expansion->getPattern()->IgnoreParens());
+}
+
+// P3817: get a using-pack's already-resolved elements (see above -- this
+// must only be called once P3817UsingPackStillDependent is false). Case 1
+// scope: the target must be a bare reference to an existing pack, so once
+// resolved it should always come back shaped as a FunctionParmPackExpr;
+// diagnoses and returns null for any other (unsupported) shape.
+static FunctionParmPackExpr *P3817GetResolvedUsingPack(Sema &S,
+                                                        BindingDecl *BD) {
+  auto *Expansion = cast<PackExpansionExpr>(BD->getReusedTargetExpr());
+  if (auto *FPPE = dyn_cast<FunctionParmPackExpr>(Expansion->getPattern()))
+    return FPPE;
+
+  S.Diag(Expansion->getBeginLoc(),
+         diag::err_decomp_decl_using_pack_not_supported)
+      << Expansion->getSourceRange();
+  return nullptr;
+}
+
 // Check the arity of the structured bindings.
 // Create the resolved pack expr if needed.
 static bool CheckBindingsCount(Sema &S, DecompositionDecl *DD,
@@ -1142,19 +1176,40 @@ static bool CheckBindingsCount(Sema &S, DecompositionDecl *DD,
   auto BindingWithPackItr = llvm::find_if(
       Bindings, [](BindingDecl *D) -> bool { return D->isParameterPack(); });
   bool HasPack = BindingWithPackItr != Bindings.end();
+  BindingDecl *BPack = HasPack ? *BindingWithPackItr : nullptr;
+  // P3817: a using-pack (`using ...targets`) is also isParameterPack(), but
+  // unlike the plain alternative, its size isn't solved for from whatever's
+  // left over -- it's fixed by the pack it refers to. The caller
+  // (CheckCompleteDecompositionDeclaration) already verified that pack is
+  // resolved before ever calling this function, so resolving it again here
+  // is expected to succeed.
+  bool IsUsingPack = HasPack && BPack->getReusedTargetExpr();
+  FunctionParmPackExpr *ResolvedUsingPack = nullptr;
+  unsigned PackSize = 0;
+  if (IsUsingPack) {
+    assert(!P3817UsingPackStillDependent(BPack) &&
+           "using-pack should already be resolved here");
+    ResolvedUsingPack = P3817GetResolvedUsingPack(S, BPack);
+    if (!ResolvedUsingPack)
+      return true;
+    PackSize = ResolvedUsingPack->getNumExpansions();
+  }
+
   bool IsValid;
+  unsigned EffectiveProvidedCount = Bindings.size();
   if (!HasPack) {
     IsValid = Bindings.size() == MemberCount;
+  } else if (IsUsingPack) {
+    EffectiveProvidedCount = Bindings.size() - 1 + PackSize;
+    IsValid = MemberCount == EffectiveProvidedCount;
   } else {
     // There may not be more members than non-pack bindings.
     IsValid = MemberCount >= Bindings.size() - 1;
+    PackSize = MemberCount - Bindings.size() + 1;
   }
 
   if (IsValid && HasPack) {
     // Create the pack expr and assign it to the binding.
-    unsigned PackSize = MemberCount - Bindings.size() + 1;
-
-    BindingDecl *BPack = *BindingWithPackItr;
     BPack->setDecomposedDecl(DD);
     SmallVector<ValueDecl *, 8> NestedBDs(PackSize);
     // Create the nested BindingDecls.
@@ -1163,6 +1218,17 @@ static bool CheckBindingsCount(Sema &S, DecompositionDecl *DD,
           S.Context, BPack->getDeclContext(), BPack->getLocation(),
           BPack->getIdentifier(), QualType());
       NestedBD->setDecomposedDecl(DD);
+      if (IsUsingPack) {
+        // P3817: give this expanded position its own concrete target -- a
+        // plain reference to the corresponding element of the pack this
+        // using-pack refers to -- so BuildP3817ReusedAssignments (which
+        // walks the flattened bindings) builds a real assignment for it,
+        // instead of one pack-shaped assignment for the whole thing.
+        ValueDecl *Elem = ResolvedUsingPack->getExpansion(I);
+        NestedBD->setReusedTargetExpr(S.BuildDeclRefExpr(
+            Elem, Elem->getType().getNonReferenceType(), VK_LValue,
+            BPack->getLocation()));
+      }
       NestedBDs[I] = NestedBD;
     }
 
@@ -1177,8 +1243,8 @@ static bool CheckBindingsCount(Sema &S, DecompositionDecl *DD,
     return false;
 
   S.Diag(DD->getLocation(), diag::err_decomp_decl_wrong_number_bindings)
-      << DecompType << (unsigned)Bindings.size() << MemberCount << MemberCount
-      << (MemberCount < Bindings.size());
+      << DecompType << EffectiveProvidedCount << MemberCount << MemberCount
+      << (MemberCount < EffectiveProvidedCount);
   return true;
 }
 
@@ -1839,6 +1905,19 @@ static void BuildP3817ReusedAssignments(Sema &S, DecompositionDecl *DD,
   }
 }
 
+// P3817: run once a DecompositionDecl is known-valid, on the *flattened*
+// bindings (DD->flat_bindings(), not DD->bindings()) -- a using-pack's
+// individual expanded elements only exist as flat_bindings()'s nested
+// entries, not as top-level ones, so this is the only view that sees a real
+// per-element target/assignment for each of them, rather than one collapsed,
+// pack-shaped target/assignment for the whole using-pack.
+static void FinishP3817UsingBindings(Sema &S, DecompositionDecl *DD) {
+  auto Flat = DD->flat_bindings();
+  SmallVector<BindingDecl *, 8> FlatBindings(Flat.begin(), Flat.end());
+  S.CheckP3817DuplicateUsingTargets(FlatBindings);
+  BuildP3817ReusedAssignments(S, DD, FlatBindings);
+}
+
 void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   QualType DecompType = DD->getType();
 
@@ -1854,6 +1933,21 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
     return;
   }
 
+  // P3817: a using-pack's own size is independent of DecompType's -- it's
+  // fixed by the pack it refers to (e.g. a function parameter pack), whose
+  // resolution has nothing to do with whether DecompType itself is
+  // dependent. If that pack isn't resolved yet -- we're still processing
+  // the enclosing template's pattern, not one of its instantiations -- this
+  // DecompositionDecl can't be completed yet either: defer, the same way
+  // the check above already does for a dependent DecompType. (checkMember
+  // Decomposition et al. and CheckBindingsCount, below, rely on this having
+  // already run: by the time they see a using-pack, it's known-resolvable.)
+  for (BindingDecl *B : DD->bindings()) {
+    if (B->isParameterPack() && B->getReusedTargetExpr() &&
+        P3817UsingPackStillDependent(B))
+      return;
+  }
+
   DecompType = DecompType.getNonReferenceType();
   ArrayRef<BindingDecl*> Bindings = DD->bindings();
 
@@ -1864,28 +1958,22 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   if (auto *CAT = Context.getAsConstantArrayType(DecompType)) {
     if (checkArrayDecomposition(*this, Bindings, DD, DecompType, CAT))
       DD->setInvalidDecl();
-    else {
-      CheckP3817DuplicateUsingTargets(Bindings);
-      BuildP3817ReusedAssignments(*this, DD, Bindings);
-    }
+    else
+      FinishP3817UsingBindings(*this, DD);
     return;
   }
   if (auto *VT = DecompType->getAs<VectorType>()) {
     if (checkVectorDecomposition(*this, Bindings, DD, DecompType, VT))
       DD->setInvalidDecl();
-    else {
-      CheckP3817DuplicateUsingTargets(Bindings);
-      BuildP3817ReusedAssignments(*this, DD, Bindings);
-    }
+    else
+      FinishP3817UsingBindings(*this, DD);
     return;
   }
   if (auto *CT = DecompType->getAs<ComplexType>()) {
     if (checkComplexDecomposition(*this, Bindings, DD, DecompType, CT))
       DD->setInvalidDecl();
-    else {
-      CheckP3817DuplicateUsingTargets(Bindings);
-      BuildP3817ReusedAssignments(*this, DD, Bindings);
-    }
+    else
+      FinishP3817UsingBindings(*this, DD);
     return;
   }
 
@@ -1901,10 +1989,8 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   case IsTupleLike::TupleLike:
     if (checkTupleLikeDecomposition(*this, Bindings, DD, DecompType, TupleSize))
       DD->setInvalidDecl();
-    else {
-      CheckP3817DuplicateUsingTargets(Bindings);
-      BuildP3817ReusedAssignments(*this, DD, Bindings);
-    }
+    else
+      FinishP3817UsingBindings(*this, DD);
     return;
 
   case IsTupleLike::NotTupleLike:
@@ -1926,10 +2012,8 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   //   E or of the same unambiguous public base class of E, ...
   if (checkMemberDecomposition(*this, Bindings, DD, DecompType, RD))
     DD->setInvalidDecl();
-  else {
-    CheckP3817DuplicateUsingTargets(Bindings);
-    BuildP3817ReusedAssignments(*this, DD, Bindings);
-  }
+  else
+    FinishP3817UsingBindings(*this, DD);
 }
 
 UnsignedOrNone Sema::GetDecompositionElementCount(QualType T,
