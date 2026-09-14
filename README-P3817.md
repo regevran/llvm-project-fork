@@ -30,6 +30,19 @@ below — what was fixed, why, and where — see
 | [Packs](P3817.md#packs) (`using ...expr`) | ⚠️ Partially implemented — only when `expr` already denotes a pack ("Case 1"); an index-pack-driven family of targets from a single non-pack object ("Case 2") is explicitly out of scope, pending the paper's own authors |
 | Templates (re-derivation at instantiation) | ✅ Implemented — target re-derived per instantiation, including inside a lambda nested in a template and inside a pack; duplicate-target check re-run per instantiation |
 
-Not upstream-tracked: engineering/process gaps (test-suite integration,
-documentation) are in REFERENCE-P3817.md's "Known gaps" section, since
-they aren't part of the paper itself.
+## Clang implementation coverage at a glance
+
+Separate from the paper itself — the engineering bar Clang expects of any
+language extension, prototype or not.
+
+| Item | Status |
+| --- | --- |
+| Experimental-extension gating (`-fstructured-binding-assignment`) | ✅ Implemented — `using` rejected without the flag, in every `-std=` mode |
+| `-ast-dump` support | ✅ Implemented |
+| `-ast-print` support | ✅ Implemented |
+| AST serialization (PCH / C++20 modules) | ✅ Implemented — PCH has direct regression coverage; the module boundary shares the same reader/writer code but has no P3817-specific test of its own |
+| Test suite integration (`ninja check-clang`) | ⚠️ Partial — see REFERENCE-P3817.md's "Known gaps" |
+| Documentation (`ReleaseNotes.rst`, `docs/LanguageExtensions.rst`, `clang/www/cxx_status.html`) | ❌ Not started |
+
+Not upstream-tracked: the reasoning behind each line of both tables is in
+REFERENCE-P3817.md's "What works"/"Known gaps" section.
