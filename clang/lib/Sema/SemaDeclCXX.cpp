@@ -808,10 +808,13 @@ static bool P3817RefersToSameUsingTarget(const Expr *E1, const Expr *E2) {
 
 // P3817: walk Bindings once, diagnosing the first using-marked binding whose
 // target expression refers to the same entity as an earlier one in the same
-// list. Shared between the as-written declaration (Bindings holds the
-// as-parsed target expressions) and, separately, each template
-// instantiation of one (Bindings holds the substituted target expressions,
-// which may only coincide for that particular instantiation).
+// list. Called from CheckCompleteDecompositionDeclaration once Bindings is
+// final -- the as-written declaration's own Bindings (as-parsed target
+// expressions), or a template instantiation's (substituted target
+// expressions, which may only coincide for that particular instantiation) --
+// rather than from the parser-only ActOnDecompositionDeclarator, so that a
+// using-pack's own expansion (not yet implemented) is already flattened into
+// concrete per-element bindings by the time this runs.
 void Sema::CheckP3817DuplicateUsingTargets(ArrayRef<BindingDecl *> Bindings) {
   SmallVector<const Expr *, 4> SeenUsingTargets;
   for (BindingDecl *BD : Bindings) {
@@ -1032,8 +1035,11 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
       // checked later, when the real `target = source` assignment is built
       // (see BuildP3817ReusedAssignments), the same way an ordinary
       // assignment statement would be. A target that duplicates an earlier
-      // one in this same binding list is diagnosed once, after all bindings
-      // below have been built (see CheckP3817DuplicateUsingTargets).
+      // one in this same binding list is diagnosed once the decomposition is
+      // completed (see CheckP3817DuplicateUsingTargets, called from
+      // CheckCompleteDecompositionDeclaration) -- not here, since a pack
+      // among these bindings isn't expanded into its concrete per-element
+      // targets until then.
       auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, /*Id=*/nullptr, QT);
       if (B.UsingTargetExpr)
         BD->setReusedTargetExpr(B.UsingTargetExpr);
@@ -1103,8 +1109,6 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
     Bindings.push_back(BD);
     ParsingInitForAutoVars.insert(BD);
   }
-
-  CheckP3817DuplicateUsingTargets(Bindings);
 
   // There are no prior lookup results for the variable itself, because it
   // is unnamed.
@@ -1860,22 +1864,28 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   if (auto *CAT = Context.getAsConstantArrayType(DecompType)) {
     if (checkArrayDecomposition(*this, Bindings, DD, DecompType, CAT))
       DD->setInvalidDecl();
-    else
+    else {
+      CheckP3817DuplicateUsingTargets(Bindings);
       BuildP3817ReusedAssignments(*this, DD, Bindings);
+    }
     return;
   }
   if (auto *VT = DecompType->getAs<VectorType>()) {
     if (checkVectorDecomposition(*this, Bindings, DD, DecompType, VT))
       DD->setInvalidDecl();
-    else
+    else {
+      CheckP3817DuplicateUsingTargets(Bindings);
       BuildP3817ReusedAssignments(*this, DD, Bindings);
+    }
     return;
   }
   if (auto *CT = DecompType->getAs<ComplexType>()) {
     if (checkComplexDecomposition(*this, Bindings, DD, DecompType, CT))
       DD->setInvalidDecl();
-    else
+    else {
+      CheckP3817DuplicateUsingTargets(Bindings);
       BuildP3817ReusedAssignments(*this, DD, Bindings);
+    }
     return;
   }
 
@@ -1891,8 +1901,10 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   case IsTupleLike::TupleLike:
     if (checkTupleLikeDecomposition(*this, Bindings, DD, DecompType, TupleSize))
       DD->setInvalidDecl();
-    else
+    else {
+      CheckP3817DuplicateUsingTargets(Bindings);
       BuildP3817ReusedAssignments(*this, DD, Bindings);
+    }
     return;
 
   case IsTupleLike::NotTupleLike:
@@ -1914,8 +1926,10 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
   //   E or of the same unambiguous public base class of E, ...
   if (checkMemberDecomposition(*this, Bindings, DD, DecompType, RD))
     DD->setInvalidDecl();
-  else
+  else {
+    CheckP3817DuplicateUsingTargets(Bindings);
     BuildP3817ReusedAssignments(*this, DD, Bindings);
+  }
 }
 
 UnsignedOrNone Sema::GetDecompositionElementCount(QualType T,

@@ -1743,13 +1743,6 @@ Decl *TemplateDeclInstantiator::VisitDecompositionDecl(DecompositionDecl *D) {
   }
   ArrayRef<BindingDecl*> NewBindingArray = NewBindings;
 
-  // P3817: two using-targets that were distinct as written (e.g. `using
-  // arr[I], using arr[J]`) may resolve to the same entity only for this
-  // particular instantiation's arguments -- the as-written check in
-  // ActOnDecompositionDeclarator can't see that, since it only ever runs
-  // once, on the unsubstituted pattern.
-  SemaRef.CheckP3817DuplicateUsingTargets(NewBindingArray);
-
   auto *NewDD = cast_if_present<DecompositionDecl>(
       VisitVarDecl(D, /*InstantiatingVarTemplate=*/false, &NewBindingArray));
 
